@@ -20,7 +20,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 }
 
 // Define constants.
-\define( 'SUTWC_VERSION', '0.0.4' );
+\define( 'SUTWC_VERSION', '0.0.1' );
 \define( 'SUTWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 \define( 'SUTWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

@@ -116,6 +116,16 @@ class Gateway extends WC_Payment_Gateway {
 	 */
 	public function init_form_fields(): void {
 		$this->form_fields = array(
+			'enabled' => array(
+				'title'       => __( 'Enable/Disable', 'sumup-terminal-for-woocommerce' ),
+				'type'        => 'checkbox',
+				'label'       => \sprintf(
+					// Translators: Placeholders %s is the link to WooCommerce POS.
+					__( 'Enable SumUp Terminal for web checkout (not necessary for %s)', 'sumup-terminal-for-woocommerce' ),
+					'<a href="https://wcpos.com" target="_blank">WooCommerce POS</a>'
+				),
+				'default'     => 'no',
+			),
 			'title' => array(
 				'title'       => __( 'Title', 'sumup-terminal-for-woocommerce' ),
 				'type'        => 'text',
@@ -423,15 +433,12 @@ class Gateway extends WC_Payment_Gateway {
 			return;
 		}
 
-		// Get the plugin directory URL
-		$plugin_url = plugin_dir_url( \dirname( __FILE__ ) );
-
 		// Enqueue the admin script
 		wp_enqueue_script(
 			'sumup-terminal-admin',
-			$plugin_url . 'assets/js/admin.js',
+			SUTWC_PLUGIN_URL . 'assets/js/admin.js',
 			array( 'jquery' ),
-			'1.0.0',
+			SUTWC_VERSION,
 			true
 		);
 
@@ -467,23 +474,21 @@ class Gateway extends WC_Payment_Gateway {
 
 		global $wp;
 
-		// Get the plugin directory URL
-		$plugin_url = plugin_dir_url( \dirname( __FILE__ ) );
 
 		// Enqueue the payment CSS
 		wp_enqueue_style(
 			'sumup-terminal-payment',
-			$plugin_url . 'assets/css/payment.css',
+			SUTWC_PLUGIN_URL . 'assets/css/payment.css',
 			array(),
-			'1.0.0'
+			SUTWC_VERSION
 		);
 
 		// Enqueue the payment script
 		wp_enqueue_script(
 			'sumup-terminal-payment',
-			$plugin_url . 'assets/js/payment.js',
+			SUTWC_PLUGIN_URL . 'assets/js/payment.js',
 			array( 'jquery' ),
-			'1.0.0',
+			SUTWC_VERSION,
 			true
 		);
 
