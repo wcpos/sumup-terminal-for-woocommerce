@@ -678,7 +678,7 @@ class Gateway extends WC_Payment_Gateway {
 				$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 				$actions .= '</ol>';
 				$actions .= '<p>';
-				$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" maxlength="8" style="text-transform: uppercase; width: 120px; margin-right: 10px;" />';
+				$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" maxlength="10" style="text-transform: uppercase; width: 200px; margin-right: 10px;" />';
 				$actions .= '<button type="button" class="button-primary sumup-btn" data-action="pair-reader">' . __( 'Pair Reader', 'sumup-terminal-for-woocommerce' ) . '</button>';
 				$actions .= '</p>';
 				$actions .= '<div id="sumup-pair-result"></div>';
