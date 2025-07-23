@@ -16,14 +16,6 @@ c3.php
 .codeception.yml
 composer.lock
 .wp-env.override.json
-assets/js/*
-!assets/js/README.md
-!assets/js/indexeddb.worker.js
-assets/css/*
-!assets/css/README.md
-assets/asset-manifest.json
-assets/static
-assets/report.html
 yarn.lock
 .yarn/install-state.gz
 .yarn/cache
