@@ -6,30 +6,21 @@
 window.sumupAdmin = {
     
     init: function() {
-        console.log('SumUp Admin JS initialized');
-        
         // Make sure ajaxurl is available
         if (typeof ajaxurl === 'undefined') {
             window.ajaxurl = sumupAdminData.ajaxUrl;
         }
-        
-        // Test that everything is working
-        console.log('AJAX URL:', window.ajaxurl);
-        console.log('Nonce:', sumupAdminData.nonce);
     },
     
     testJS: function() {
         alert('JavaScript is working! AJAX URL: ' + window.ajaxurl);
-        console.log('Test JS function called successfully');
     },
     
     pairReader: function() {
-        console.log('sumupPairReader called');
         const pairingCode = document.getElementById('sumup-pairing-code');
         const resultDiv = document.getElementById('sumup-pair-result');
         
         if (!pairingCode || !resultDiv) {
-            console.error('Required elements not found');
             return;
         }
         
@@ -41,7 +32,6 @@ window.sumupAdmin = {
         }
         
         resultDiv.innerHTML = '<div style="color: #0073aa; margin-top: 10px;">Pairing reader...</div>';
-        console.log('Making AJAX request to:', window.ajaxurl);
         
         fetch(window.ajaxurl, {
             method: 'POST',
@@ -55,14 +45,12 @@ window.sumupAdmin = {
             })
         })
         .then(response => {
-            console.log('Response status:', response.status);
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Response data:', data);
             if (data.success) {
                 resultDiv.innerHTML = '<div style="color: #00a32a; margin-top: 10px;">✓ Reader paired successfully! Refreshing page...</div>';
                 setTimeout(() => location.reload(), 2000);
@@ -71,13 +59,11 @@ window.sumupAdmin = {
             }
         })
         .catch(error => {
-            console.error('AJAX Error:', error);
             resultDiv.innerHTML = '<div style="color: #d63638; margin-top: 10px;">✗ Network error: ' + error.message + '</div>';
         });
     },
     
     unpairReader: function(readerId) {
-        console.log('sumupUnpairReader called with ID:', readerId);
         
         if (!confirm(sumupAdminData.strings.confirmUnpair)) {
             return;
@@ -104,7 +90,6 @@ window.sumupAdmin = {
             }
         })
         .catch(error => {
-            console.error('AJAX Error:', error);
             alert(sumupAdminData.strings.networkError);
         });
     },
@@ -121,7 +106,6 @@ function setupEventListeners() {
             event.preventDefault();
             
             const action = event.target.getAttribute('data-action');
-            console.log('Button clicked with action:', action);
             
             switch (action) {
                 case 'test-js':
@@ -137,7 +121,7 @@ function setupEventListeners() {
                     }
                     break;
                 default:
-                    console.warn('Unknown action:', action);
+                    break;
             }
         }
     });

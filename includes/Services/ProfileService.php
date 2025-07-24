@@ -16,19 +16,11 @@ class ProfileService extends HttpClient {
 	 * @return array|false Profile data or false on failure.
 	 */
 	public function get_profile() {
-		\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: has_api_key() = ' . ( $this->has_api_key() ? 'TRUE' : 'FALSE' ) );
-		
 		if ( ! $this->has_api_key() ) {
-			\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: No API key available' );
-
 			return false;
 		}
 
-		\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: Making API call to /v0.1/me' );
-		$result = parent::get( '/v0.1/me' );
-		\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: API call returned: ' . ( $result ? 'DATA' : 'FALSE' ) );
-		
-		return $result;
+		return parent::get( '/me' );
 	}
 
 	/**
@@ -50,21 +42,10 @@ class ProfileService extends HttpClient {
 	public function get_merchant_code() {
 		$profile = $this->get_profile();
 
-		// Debug logging
-		\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: Profile API call result: ' . ( $profile ? 'SUCCESS' : 'FAILED' ) );
-		if ( $profile ) {
-			\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: Has merchant_profile? ' . ( isset( $profile['merchant_profile'] ) ? 'YES' : 'NO' ) );
-			if ( isset( $profile['merchant_profile'] ) ) {
-				\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: Has merchant_code in merchant_profile? ' . ( isset( $profile['merchant_profile']['merchant_code'] ) ? 'YES' : 'NO' ) );
-			}
-		}
-
 		// Check if merchant profile exists and has merchant_code
 		if ( $profile && isset( $profile['merchant_profile']['merchant_code'] ) ) {
 			$merchant_code = $profile['merchant_profile']['merchant_code'];
 			$this->set_merchant_id( $merchant_code );
-
-			\WCPOS\WooCommercePOS\SumUpTerminal\Logger::log( 'ProfileService Debug: Found merchant_code: ' . $merchant_code );
 
 			return $merchant_code;
 		}
@@ -84,6 +65,6 @@ class ProfileService extends HttpClient {
 			return false;
 		}
 
-		return parent::get( "/v0.1/merchants/{$merchant_code}" );
+		return parent::get( "/merchants/{$merchant_code}" );
 	}
 }

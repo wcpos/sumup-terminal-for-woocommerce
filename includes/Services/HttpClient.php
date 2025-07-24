@@ -23,6 +23,11 @@ class HttpClient {
 	protected $base_url;
 
 	/**
+	 * @var string The SumUp API version.
+	 */
+	protected $api_version;
+
+	/**
 	 * @var string The merchant ID (retrieved from profile).
 	 */
 	protected $merchant_id;
@@ -30,15 +35,19 @@ class HttpClient {
 	/**
 	 * Constructor for the HTTP client.
 	 *
-	 * @param string $api_key  The SumUp API key.
-	 * @param string $base_url The SumUp API base URL.
+	 * @param string $api_key     The SumUp API key.
+	 * @param string $base_url    The SumUp API base URL.
+	 * @param string $api_version The SumUp API version.
 	 */
-	public function __construct( $api_key = '', $base_url = 'https://api.sumup.com' ) {
-		$this->api_key  = $api_key;
-		$this->base_url = $base_url;
+	public function __construct( $api_key = '', $base_url = '', $api_version = 'v0.1' ) {
+		// Use development URL if defined, otherwise use production URL
+		if ( empty( $base_url ) ) {
+			$base_url = \defined( 'SUMUP_API_BASE_URL' ) ? SUMUP_API_BASE_URL : 'https://api.sumup.com';
+		}
 		
-		// Debug logging
-		Logger::log( 'HttpClient Debug: Initialized with API key: ' . ( ! empty( $api_key ) ? 'PRESENT (' . substr( $api_key, 0, 10 ) . '...)' : 'EMPTY' ) );
+		$this->api_key     = $api_key;
+		$this->base_url    = $base_url;
+		$this->api_version = $api_version;
 	}
 
 	/**
@@ -69,6 +78,15 @@ class HttpClient {
 	}
 
 	/**
+	 * Get the API version prefix for endpoints.
+	 *
+	 * @return string API version prefix (e.g., '/v0.1')
+	 */
+	protected function get_api_version_prefix() {
+		return '/' . $this->api_version;
+	}
+
+	/**
 	 * Get the authorization headers.
 	 *
 	 * @return array Authorization headers.
@@ -94,7 +112,7 @@ class HttpClient {
 	 * @return array|false Response data or false on failure.
 	 */
 	protected function get( $endpoint, $params = array() ) {
-		$url = $this->base_url . $endpoint;
+		$url = $this->base_url . $this->get_api_version_prefix() . $endpoint;
 
 		if ( ! empty( $params ) ) {
 			$url .= '?' . http_build_query( $params );
@@ -118,7 +136,7 @@ class HttpClient {
 	 * @return array|false Response data or false on failure.
 	 */
 	protected function post( $endpoint, $data = array() ) {
-		$url = $this->base_url . $endpoint;
+		$url = $this->base_url . $this->get_api_version_prefix() . $endpoint;
 
 		$args = array(
 			'method'  => 'POST',
@@ -139,7 +157,7 @@ class HttpClient {
 	 * @return array|false Response data or false on failure.
 	 */
 	protected function put( $endpoint, $data = array() ) {
-		$url = $this->base_url . $endpoint;
+		$url = $this->base_url . $this->get_api_version_prefix() . $endpoint;
 
 		$args = array(
 			'method'  => 'PUT',
@@ -159,7 +177,7 @@ class HttpClient {
 	 * @return array|false Response data or false on failure.
 	 */
 	protected function delete( $endpoint ) {
-		$url = $this->base_url . $endpoint;
+		$url = $this->base_url . $this->get_api_version_prefix() . $endpoint;
 
 		$args = array(
 			'method'  => 'DELETE',
@@ -182,9 +200,6 @@ class HttpClient {
 	 * @return array|false Response data or false on failure.
 	 */
 	private function make_request( $url, $args, $method, $endpoint, $data = array() ) {
-		// Log the request.
-		Logger::log( "SumUp API Request: $method $endpoint" );
-
 		$response = wp_remote_request( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
@@ -195,9 +210,6 @@ class HttpClient {
 
 		$body = wp_remote_retrieve_body( $response );
 		$code = wp_remote_retrieve_response_code( $response );
-
-		// Log the response.
-		Logger::log( "SumUp API Response ($method $endpoint): HTTP $code" );
 
 		if ( $code < 200 || $code >= 300 ) {
 			$error_details = json_decode( $body, true );

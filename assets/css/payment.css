@@ -100,6 +100,37 @@
     color: #d63638;
 }
 
+/* Additional status styles for specific payment states */
+.sumup-status-paid {
+    background: #edfaef;
+    border: 1px solid #00a32a;
+    color: #00a32a;
+}
+
+.sumup-status-pending {
+    background: #e7f3ff;
+    border: 1px solid #0073aa;
+    color: #0073aa;
+}
+
+.sumup-status-failed {
+    background: #fcf0f1;
+    border: 1px solid #d63638;
+    color: #d63638;
+}
+
+.sumup-status-timeout {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+}
+
+.sumup-status-in_progress {
+    background: #e7f3ff;
+    border: 1px solid #0073aa;
+    color: #0073aa;
+}
+
 /* Responsive design */
 @media (max-width: 600px) {
     .sumup-reader-card {

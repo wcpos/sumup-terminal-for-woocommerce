@@ -7,10 +7,9 @@
 namespace WCPOS\WooCommercePOS\SumUpTerminal;
 
 use WC_Payment_Gateway;
-use WCPOS\WooCommercePOS\SumUpTerminal\Services\CheckoutService;
+
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
-use WCPOS\WooCommercePOS\SumUpTerminal\Services\WebhookService;
 
 /**
  * Class SumUpTerminalGateway.
@@ -28,20 +27,14 @@ class Gateway extends WC_Payment_Gateway {
 	 */
 	private $profile_service;
 
-	/**
-	 * @var CheckoutService The checkout service instance.
-	 */
-	private $checkout_service;
+
 
 	/**
 	 * @var ReaderService The reader service instance.
 	 */
 	private $reader_service;
 
-	/**
-	 * @var WebhookService The webhook service instance.
-	 */
-	private $webhook_service;
+
 
 	/**
 	 * Constructor for the gateway.
@@ -84,14 +77,7 @@ class Gateway extends WC_Payment_Gateway {
 		return $this->profile_service;
 	}
 
-	/**
-	 * Get the checkout service.
-	 *
-	 * @return CheckoutService
-	 */
-	public function get_checkout_service() {
-		return $this->checkout_service;
-	}
+
 
 	/**
 	 * Get the reader service.
@@ -102,14 +88,7 @@ class Gateway extends WC_Payment_Gateway {
 		return $this->reader_service;
 	}
 
-	/**
-	 * Get the webhook service.
-	 *
-	 * @return WebhookService
-	 */
-	public function get_webhook_service() {
-		return $this->webhook_service;
-	}
+
 
 	/**
 	 * Initialize gateway form fields.
@@ -275,20 +254,10 @@ class Gateway extends WC_Payment_Gateway {
 		// Description for the payment method.
 		echo '<p>' . esc_html( $this->get_option( 'description' ) ) . '</p>';
 
-		// Debug: Check what's happening with the configuration
-		Logger::log( 'Payment Fields Debug: API Key present? ' . ( ! empty( $this->api_key ) ? 'YES' : 'NO' ) );
-		Logger::log( 'Payment Fields Debug: Reader service exists? ' . ( isset( $this->reader_service ) ? 'YES' : 'NO' ) );
-		
-		if ( isset( $this->reader_service ) ) {
-			$merchant_id = $this->reader_service->get_merchant_id();
-			Logger::log( 'Payment Fields Debug: Merchant ID: ' . ( $merchant_id ?: 'EMPTY' ) );
-		}
-
 		// Check if merchant_id is available
 		if ( ! $this->reader_service || ! $this->reader_service->get_merchant_id() ) {
 			// Try to reinitialize services if they're missing
 			if ( ! empty( $this->api_key ) ) {
-				Logger::log( 'Payment Fields Debug: Attempting to reinitialize services...' );
 				$this->init_services();
 			}
 			
@@ -359,44 +328,18 @@ class Gateway extends WC_Payment_Gateway {
 
 		echo '</div>';
 
+		// Add empty nonce for JavaScript compatibility (not used for validation in POS environment)
+		wp_add_inline_script(
+			'sumup-terminal-payment',
+			'if (typeof sumupPaymentData !== "undefined") { sumupPaymentData.nonce = "pos_environment"; }',
+			'after'
+		);
+
 		// Fallback message for users without JavaScript enabled.
 		echo '<noscript>' . esc_html__( 'Please enable JavaScript to use the SumUp Terminal integration.', 'sumup-terminal-for-woocommerce' ) . '</noscript>';
 	}
 
-	/**
-	 * Create a SumUp terminal checkout for the given order.
-	 *
-	 * @param \WC_Order $order The WooCommerce order.
-	 *
-	 * @return array|false Checkout data or false on failure.
-	 */
-	public function create_sumup_checkout( $order ) {
-		if ( empty( $this->api_key ) ) {
-			return false;
-		}
 
-		try {
-			// Create webhook URL for this transaction
-			$webhook_url = home_url( '/wp-json/sumup-terminal/v1/webhook' );
-
-			// Create terminal checkout with webhook URL
-			$response = $this->reader_service->create_checkout_for_order( $order, $webhook_url );
-
-			if ( $response && isset( $response['checkout_id'] ) ) {
-				return array(
-					'checkout_id' => $response['checkout_id'],
-					'amount'      => \floatval( $order->get_total() ),
-					'currency'    => $order->get_currency(),
-				);
-			}
-
-			return false;
-		} catch ( \Exception $e ) {
-			Logger::log( 'SumUp terminal checkout creation failed: ' . $e->getMessage() );
-
-			return false;
-		}
-	}
 
 	/**
 	 * Process admin options (override to reinitialize services when API key changes).
@@ -498,18 +441,17 @@ class Gateway extends WC_Payment_Gateway {
 			$order_id = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
 		}
 
-		// Localize script data for payment interface
+		// Localize script data for payment interface (nonce will be added in payment_fields)
 		wp_localize_script(
 			'sumup-terminal-payment',
 			'sumupPaymentData',
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'sumup_payment_actions' ),
 				'orderId' => $order_id,
 				'strings' => array(
 					'startingPayment'    => __( 'Starting payment...', 'sumup-terminal-for-woocommerce' ),
 					'paymentInProgress'  => __( 'Payment in progress...', 'sumup-terminal-for-woocommerce' ),
-					'paymentCancelled'   => __( 'Payment cancelled.', 'sumup-terminal-for-woocommerce' ),
+					'paymentCancelled'   => __( 'Cancellation request sent. Please check the reader.', 'sumup-terminal-for-woocommerce' ),
 					'paymentSuccess'     => __( 'Payment successful!', 'sumup-terminal-for-woocommerce' ),
 					'paymentFailed'      => __( 'Payment failed:', 'sumup-terminal-for-woocommerce' ),
 					'networkError'       => __( 'Network error occurred', 'sumup-terminal-for-woocommerce' ),
@@ -522,29 +464,16 @@ class Gateway extends WC_Payment_Gateway {
 	 * Initialize the SumUp services.
 	 */
 	private function init_services(): void {
-		Logger::log( 'Init Services Debug: Starting initialization with API key: ' . ( ! empty( $this->api_key ) ? 'PRESENT' : 'MISSING' ) );
-		
-		$this->profile_service  = new ProfileService( $this->api_key );
-		$this->checkout_service = new CheckoutService( $this->api_key );
-		$this->reader_service   = new ReaderService( $this->api_key );
-		$this->webhook_service  = new WebhookService( $this->api_key );
+		$this->profile_service = new ProfileService( $this->api_key );
+		$this->reader_service  = new ReaderService( $this->api_key );
 
 		// Set merchant ID if available and API key is set.
 		if ( ! empty( $this->api_key ) ) {
-			Logger::log( 'Init Services Debug: Attempting to get merchant code...' );
 			$merchant_code = $this->profile_service->get_merchant_code();
-			Logger::log( 'Init Services Debug: Merchant code retrieved: ' . ( $merchant_code ?: 'EMPTY' ) );
 			
 			if ( $merchant_code ) {
-				$this->checkout_service->set_merchant_id( $merchant_code );
 				$this->reader_service->set_merchant_id( $merchant_code );
-				$this->webhook_service->set_merchant_id( $merchant_code );
-				Logger::log( 'Init Services Debug: Merchant ID set on all services: ' . $merchant_code );
-			} else {
-				Logger::log( 'Init Services Debug: Failed to get merchant code - services initialized without merchant ID' );
 			}
-		} else {
-			Logger::log( 'Init Services Debug: No API key available - services initialized without merchant ID' );
 		}
 	}
 

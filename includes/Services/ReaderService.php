@@ -18,32 +18,20 @@ class ReaderService extends HttpClient {
 	 * @return array|false Readers data or false on failure.
 	 */
 	public function get_all() {
-		Logger::log( 'ReaderService Debug: get_all() called' );
-		
 		if ( ! $this->get_merchant_id() ) {
-			Logger::log( 'ReaderService Debug: No merchant ID available' );
-
 			return false;
 		}
 
-		Logger::log( 'ReaderService Debug: Fetching readers for merchant: ' . $this->get_merchant_id() );
-		$result = parent::get( "/v0.1/merchants/{$this->get_merchant_id()}/readers" );
+		$result = parent::get( "/merchants/{$this->get_merchant_id()}/readers" );
 		
 		if ( $result ) {
-			Logger::log( 'ReaderService Debug: Raw API response: ' . wp_json_encode( $result ) );
-			
 			// Check if response has 'items' structure
 			if ( isset( $result['items'] ) && \is_array( $result['items'] ) ) {
-				Logger::log( 'ReaderService Debug: Found items array with ' . \count( $result['items'] ) . ' readers' );
-
 				return $result['items'];
 			}
-			Logger::log( 'ReaderService Debug: No items array found, returning raw response' );
-			Logger::log( 'ReaderService Debug: get_all() returned: DATA (' . \count( $result ) . ' items)' );
 
 			return $result;
 		}
-		Logger::log( 'ReaderService Debug: get_all() returned: FALSE' );
 
 		return false;
 	}
@@ -60,7 +48,7 @@ class ReaderService extends HttpClient {
 			return false;
 		}
 
-		return parent::get( "/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}" );
+		return parent::get( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}" );
 	}
 
 	/**
@@ -71,19 +59,11 @@ class ReaderService extends HttpClient {
 	 * @return array|false Reader data or false on failure.
 	 */
 	public function create( array $data ) {
-		Logger::log( 'ReaderService Debug: create() called with data: ' . wp_json_encode( $data ) );
-		
 		if ( ! $this->get_merchant_id() ) {
-			Logger::log( 'ReaderService Debug: create() failed - no merchant ID' );
-
 			return false;
 		}
 
-		Logger::log( 'ReaderService Debug: Pairing reader for merchant: ' . $this->get_merchant_id() );
-		$result = parent::post( "/v0.1/merchants/{$this->get_merchant_id()}/readers", $data );
-		Logger::log( 'ReaderService Debug: create() returned: ' . ( $result ? 'SUCCESS' : 'FAILED' ) );
-		
-		return $result;
+		return parent::post( "/merchants/{$this->get_merchant_id()}/readers", $data );
 	}
 
 	/**
@@ -94,21 +74,13 @@ class ReaderService extends HttpClient {
 	 * @return bool True on success, false on failure.
 	 */
 	public function destroy( $reader_id ) {
-		Logger::log( 'ReaderService Debug: destroy() called for reader: ' . $reader_id );
-		
 		if ( ! $this->get_merchant_id() ) {
-			Logger::log( 'ReaderService Debug: destroy() failed - no merchant ID' );
-
 			return false;
 		}
 
-		Logger::log( 'ReaderService Debug: Unpairing reader for merchant: ' . $this->get_merchant_id() . ', reader: ' . $reader_id );
-		$response = parent::delete( "/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}" );
+		$response = parent::delete( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}" );
 
-		$success = $response && ( $response['success'] ?? true );
-		Logger::log( 'ReaderService Debug: destroy() returned: ' . ( $success ? 'SUCCESS' : 'FAILED' ) );
-		
-		return $success;
+		return $response && ( $response['success'] ?? true );
 	}
 
 	/**
@@ -120,85 +92,99 @@ class ReaderService extends HttpClient {
 	 * @return array|false Checkout response or false on failure.
 	 */
 	public function checkout( $reader_id, $checkout_data ) {
-		Logger::log( 'ReaderService Debug: checkout() called for reader: ' . $reader_id . ' with data: ' . wp_json_encode( $checkout_data ) );
-		
 		if ( ! $this->get_merchant_id() ) {
-			Logger::log( 'ReaderService Debug: checkout() failed - no merchant ID' );
-
 			return false;
 		}
 
-		Logger::log( 'ReaderService Debug: Creating checkout for merchant: ' . $this->get_merchant_id() . ', reader: ' . $reader_id );
-		$result = parent::post(
-			"/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/checkout",
+		return parent::post(
+			"/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/checkout",
 			$checkout_data
 		);
-		Logger::log( 'ReaderService Debug: checkout() returned: ' . ( $result ? 'SUCCESS' : 'FAILED' ) );
-		
-		return $result;
 	}
 
 	/**
 	 * Create a terminal checkout for a WooCommerce order.
 	 *
-	 * @param WC_Order $order       The WooCommerce order.
-	 * @param string   $webhook_url Optional webhook URL for transaction notifications.
+	 * @param WC_Order $order     The WooCommerce order.
+	 * @param string   $reader_id The specific reader ID to use for the checkout.
 	 *
 	 * @return array|false Checkout data or false on failure.
 	 */
-	public function create_checkout_for_order( $order, $webhook_url = '' ) {
+	public function create_checkout_for_order( $order, $reader_id ) {
 		if ( ! $this->has_api_key() || ! $this->get_merchant_id() ) {
 			return false;
 		}
 
-		// Get the first available reader
-		$readers = $this->get_all();
-		if ( ! $readers || empty( $readers ) ) {
-			return false; // No readers available
+		// Validate that the reader ID is provided
+		if ( empty( $reader_id ) ) {
+			Logger::log( 'ReaderService: create_checkout_for_order() called without reader_id' );
+
+			return false;
 		}
 
-		$reader_id = $readers[0]['id']; // Use the first reader
-
-		// Prepare checkout data
+		// Prepare checkout data according to SumUp API v0.1 specification
 		$checkout_data = array(
-			'amount'   => \floatval( $order->get_total() ),
-			'currency' => $order->get_currency(),
+			'total_amount' => array(
+				'value'      => (int) round( $order->get_total() * 100 ), // Convert to minor units (cents)
+				'currency'   => $order->get_currency(),
+				'minor_unit' => 2, // Most currencies use 2 decimal places
+			),
 		);
 
-		// Add webhook URL if provided
-		if ( ! empty( $webhook_url ) ) {
-			$checkout_data['webhook_url'] = $webhook_url;
+		// Add optional description
+		$checkout_data['description'] = \sprintf(
+			__( 'Order #%s', 'sumup-terminal-for-woocommerce' ),
+			$order->get_order_number()
+		);
+
+		// Construct webhook URL using WordPress AJAX with user-independent token and order ID
+		$webhook_token = $this->generate_webhook_token( $order->get_id() );
+		
+		$checkout_data['return_url'] = add_query_arg( array(
+			'action'   => 'sumup_webhook',
+			'nonce'    => $webhook_token,
+			'order_id' => $order->get_id(),
+		), admin_url( 'admin-ajax.php' ) );
+
+		$result = $this->checkout( $reader_id, $checkout_data );
+		
+		// If successful, save the transaction ID to the order
+		if ( $result && isset( $result['data']['client_transaction_id'] ) ) {
+			$transaction_id = $result['data']['client_transaction_id'];
+			$order->set_transaction_id( $transaction_id );
+			$order->save();
+			
+			Logger::log( 'SumUp transaction ID saved: ' . $transaction_id . ' for order: ' . $order->get_id() );
 		}
 
-		return $this->checkout( $reader_id, $checkout_data );
+		return $result;
 	}
 
 	/**
 	 * Cancel/terminate a checkout on a reader.
 	 *
+	 * Note: This is an asynchronous operation. The API only confirms the terminate
+	 * request was accepted, but actual termination may take time. If successful,
+	 * a webhook will be sent to the return_url with status "FAILED".
+	 *
 	 * @param string $reader_id Reader ID.
 	 *
-	 * @return bool True on success, false on failure.
+	 * @return bool True if terminate request was accepted, false if rejected.
 	 */
 	public function cancel_checkout( $reader_id ) {
-		Logger::log( 'ReaderService Debug: cancel_checkout() called for reader: ' . $reader_id );
-		
 		if ( ! $this->get_merchant_id() ) {
-			Logger::log( 'ReaderService Debug: cancel_checkout() failed - no merchant ID' );
-
 			return false;
 		}
 
-		Logger::log( 'ReaderService Debug: Terminating checkout for merchant: ' . $this->get_merchant_id() . ', reader: ' . $reader_id );
 		// According to SumUp API docs, terminate action is sent to the reader
-		$response = parent::post( "/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/terminate", array(
-			'action' => 'terminate',
-		) );
+		// This is asynchronous - no confirmation of actual termination
+		// No request body is required for terminate
+		$response = parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/terminate" );
 
-		$success = false !== $response;
-		Logger::log( 'ReaderService Debug: cancel_checkout() returned: ' . ( $success ? 'SUCCESS' : 'FAILED' ) );
-		
-		return $success;
+		// SumUp API returns HTTP 204 (no content) for terminate requests
+		// We consider it successful if the request was sent (no network error)
+		// The actual termination result will come via webhook to return_url
+		return ! is_wp_error( $response );
 	}
 
 	/**
@@ -213,7 +199,7 @@ class ReaderService extends HttpClient {
 			return false;
 		}
 
-		return parent::get( "/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/status" );
+		return parent::get( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/status" );
 	}
 
 	/**
@@ -228,7 +214,7 @@ class ReaderService extends HttpClient {
 			return false;
 		}
 
-		return parent::post( "/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/connect" );
+		return parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/connect" );
 	}
 
 	/**
@@ -243,8 +229,24 @@ class ReaderService extends HttpClient {
 			return false;
 		}
 
-		$response = parent::post( "/v0.1/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/disconnect" );
+		$response = parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/disconnect" );
 
 		return $response && ( $response['success'] ?? true );
+	}
+
+	/**
+	 * Generate a webhook token for a specific order.
+	 * This is user-independent and suitable for external webhook validation.
+	 *
+	 * @param int $order_id The order ID.
+	 *
+	 * @return string The webhook token.
+	 */
+	private function generate_webhook_token( $order_id ) {
+		// Create a deterministic token based on order ID and WordPress salts
+		// This is user-independent but specific to this WordPress installation
+		$data = 'sumup_webhook_' . $order_id . wp_salt( 'nonce' );
+		
+		return substr( wp_hash( $data ), 0, 10 );
 	}
 }

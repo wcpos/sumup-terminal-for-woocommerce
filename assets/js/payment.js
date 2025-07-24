@@ -107,6 +107,9 @@
                 return;
             }
 
+            // Stop any active polling for this reader
+            this.stopAllPollingForReader(readerId);
+
             // Update UI
             button.prop('disabled', true);
             statusDiv.html('<div class="sumup-status-message">Cancelling payment...</div>');
@@ -138,17 +141,132 @@
         },
 
         /**
-         * Poll payment status (you can implement this based on your needs)
+         * Poll payment status by checking order meta data
          */
         pollPaymentStatus: function(readerId, orderId, statusDiv, startBtn, cancelBtn) {
-            // This is a placeholder for polling payment status
-            // You might want to implement periodic status checks here
-            console.log('Payment polling started for reader:', readerId);
             
-            // For now, just update the status message
-            setTimeout(() => {
-                statusDiv.append('<div class="sumup-status-info">Follow the instructions on your card reader to complete the payment.</div>');
-            }, 2000);
+            // Store polling state
+            const pollData = {
+                readerId: readerId,
+                orderId: orderId,
+                statusDiv: statusDiv,
+                startBtn: startBtn,
+                cancelBtn: cancelBtn,
+                pollCount: 0,
+                maxPolls: 120, // 2 minutes at 1-second intervals
+                intervalId: null
+            };
+            
+            // Initial status message
+            statusDiv.append('<div class="sumup-status-info">Follow the instructions on your card reader to complete the payment.</div>');
+            
+            // Start polling
+            this.startPolling(pollData);
+        },
+
+        /**
+         * Start the polling process
+         */
+        startPolling: function(pollData) {
+            const self = this;
+            
+            pollData.intervalId = setInterval(() => {
+                pollData.pollCount++;
+                
+                // Check if we've exceeded max polling attempts
+                if (pollData.pollCount > pollData.maxPolls) {
+                    self.stopPolling(pollData);
+                    self.showError(pollData.statusDiv, 'Payment polling timed out. Please check the reader and try again.');
+                    self.resetPaymentInterface(pollData.startBtn, pollData.cancelBtn, pollData.statusDiv);
+                    return;
+                }
+                
+                // Make AJAX request to check payment status
+                $.ajax({
+                    url: window.ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'sumup_check_payment_status',
+                        order_id: pollData.orderId
+                    },
+                    success: (response) => {
+                        if (response.success) {
+                            self.handlePaymentStatusResponse(pollData, response.data);
+                        }
+                    },
+                    error: (xhr) => {
+                        // Don't stop polling on network errors, just continue
+                    }
+                });
+            }, 1000); // Poll every second
+        },
+
+        /**
+         * Handle payment status response
+         */
+        handlePaymentStatusResponse: function(pollData, data) {
+            const { status, message, continue_polling, submit_form } = data;
+            
+            // Update status message
+            pollData.statusDiv.html('<div class="sumup-status-' + status.toLowerCase() + '">' + message + '</div>');
+            
+            // If we shouldn't continue polling, stop
+            if (!continue_polling) {
+                this.stopPolling(pollData);
+                
+                if (submit_form && status === 'PAID') {
+                    // Payment successful - submit the checkout form
+                    this.handleSuccessfulPayment(pollData);
+                } else {
+                    // Payment failed/cancelled - reset interface
+                    this.resetPaymentInterface(pollData.startBtn, pollData.cancelBtn, pollData.statusDiv);
+                }
+            }
+        },
+
+        /**
+         * Handle successful payment
+         */
+        handleSuccessfulPayment: function(pollData) {
+            // Try to click the place order button first (WooCommerce order-pay page)
+            const placeOrderBtn = $('#place_order');
+            if (placeOrderBtn.length > 0) {
+                placeOrderBtn.click();
+                return;
+            }
+            
+            // Try to submit the order review form (WooCommerce order-pay page)
+            const orderReviewForm = $('#order_review');
+            if (orderReviewForm.length > 0) {
+                orderReviewForm.submit();
+                return;
+            }
+            
+            // Fallback: try standard checkout form
+            const checkoutForm = $('form.checkout, form[name="checkout"]');
+            if (checkoutForm.length > 0) {
+                checkoutForm.submit();
+                return;
+            }
+            
+            // Final fallback: try to find any form on the page
+            const anyForm = $('form').first();
+            if (anyForm.length > 0) {
+                anyForm.submit();
+            } else {
+                // No form found, just show success message
+                pollData.statusDiv.html('<div class="sumup-status-success">Payment successful! Please refresh the page to continue.</div>');
+            }
+        },
+
+        /**
+         * Stop polling
+         */
+        stopPolling: function(pollData) {
+            if (pollData.intervalId) {
+                clearInterval(pollData.intervalId);
+                pollData.intervalId = null;
+            }
         },
 
         /**
@@ -201,6 +319,14 @@
         showError: function(statusDiv, message) {
             statusDiv.html('<div class="sumup-status-error" style="color: #d63638; padding: 5px; background: #fcf0f1; border: 1px solid #d63638; border-radius: 3px;">' + 
                           sumupPaymentData.strings.paymentFailed + ' ' + message + '</div>');
+        },
+
+        /**
+         * Stop all polling for a specific reader (utility function)
+         */
+        stopAllPollingForReader: function(readerId) {
+            // This is a simple implementation - in a more complex scenario, 
+            // you might want to track active polling instances
         }
     };
 
