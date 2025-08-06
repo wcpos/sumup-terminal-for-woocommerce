@@ -522,11 +522,11 @@ class AjaxHandler {
 		$profile_service = new ProfileService( $api_key );
 		$reader_service  = new ReaderService( $api_key );
 
-		// Set merchant ID if available.
-		$merchant_code = $profile_service->get_merchant_code();
-		if ( $merchant_code ) {
-			$reader_service->set_merchant_id( $merchant_code );
-		}
+		// Set the profile service on the reader service for lazy merchant ID loading
+		$reader_service->set_profile_service( $profile_service );
+
+		// Note: We no longer fetch merchant_code here to avoid unnecessary API calls.
+		// The merchant_code will be fetched lazily when needed and cached.
 
 		return array(
 			'profile' => $profile_service,

@@ -13,12 +13,26 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
  */
 class ReaderService extends HttpClient {
 	/**
+	 * @var null|ProfileService Profile service instance for lazy loading merchant ID.
+	 */
+	private $profile_service;
+
+	/**
+	 * Set the profile service for lazy loading merchant ID.
+	 *
+	 * @param ProfileService $profile_service Profile service instance.
+	 */
+	public function set_profile_service( ProfileService $profile_service ): void {
+		$this->profile_service = $profile_service;
+	}
+
+	/**
 	 * Get all readers for the merchant.
 	 *
 	 * @return array|false Readers data or false on failure.
 	 */
 	public function get_all() {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -44,7 +58,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Reader data or false on failure.
 	 */
 	public function get_reader( $reader_id ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -59,7 +73,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Reader data or false on failure.
 	 */
 	public function create( array $data ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -74,7 +88,7 @@ class ReaderService extends HttpClient {
 	 * @return bool True on success, false on failure.
 	 */
 	public function destroy( $reader_id ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -92,7 +106,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Checkout response or false on failure.
 	 */
 	public function checkout( $reader_id, $checkout_data ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -111,7 +125,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Checkout data or false on failure.
 	 */
 	public function create_checkout_for_order( $order, $reader_id ) {
-		if ( ! $this->has_api_key() || ! $this->get_merchant_id() ) {
+		if ( ! $this->has_api_key() || ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -172,7 +186,7 @@ class ReaderService extends HttpClient {
 	 * @return bool True if terminate request was accepted, false if rejected.
 	 */
 	public function cancel_checkout( $reader_id ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -195,7 +209,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Reader status or false on failure.
 	 */
 	public function get_status( $reader_id ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -210,7 +224,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Connection response or false on failure.
 	 */
 	public function connect( $reader_id ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
@@ -225,13 +239,37 @@ class ReaderService extends HttpClient {
 	 * @return bool True on success, false on failure.
 	 */
 	public function disconnect( $reader_id ) {
-		if ( ! $this->get_merchant_id() ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
 		$response = parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/disconnect" );
 
 		return $response && ( $response['success'] ?? true );
+	}
+
+	/**
+	 * Get merchant ID, fetching it lazily if not set.
+	 *
+	 * @return null|string Merchant ID or null if unavailable.
+	 */
+	private function ensure_merchant_id() {
+		// If merchant ID is already set, return it
+		if ( $this->get_merchant_id() ) {
+			return $this->get_merchant_id();
+		}
+
+		// Try to fetch it from the profile service
+		if ( $this->profile_service ) {
+			$merchant_code = $this->profile_service->get_merchant_code();
+			if ( $merchant_code ) {
+				$this->set_merchant_id( $merchant_code );
+
+				return $merchant_code;
+			}
+		}
+
+		return null;
 	}
 
 	/**

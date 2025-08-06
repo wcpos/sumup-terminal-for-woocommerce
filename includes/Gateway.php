@@ -254,21 +254,23 @@ class Gateway extends WC_Payment_Gateway {
 		// Description for the payment method.
 		echo '<p>' . esc_html( $this->get_option( 'description' ) ) . '</p>';
 
-		// Check if merchant_id is available
-		if ( ! $this->reader_service || ! $this->reader_service->get_merchant_id() ) {
-			// Try to reinitialize services if they're missing
-			if ( ! empty( $this->api_key ) ) {
-				$this->init_services();
-			}
-			
-			// Check again after potential reinitialization
-			if ( ! $this->reader_service || ! $this->reader_service->get_merchant_id() ) {
-				echo '<div class="woocommerce-error">';
-				echo '<p>' . esc_html__( 'SumUp Terminal is not properly configured. Please contact the store administrator.', 'sumup-terminal-for-woocommerce' ) . '</p>';
-				echo '</div>';
+		// Check if services are available and API key is valid
+		if ( ! $this->profile_service || ! $this->reader_service || empty( $this->api_key ) ) {
+			echo '<div class="woocommerce-error">';
+			echo '<p>' . esc_html__( 'SumUp Terminal is not properly configured. Please contact the store administrator.', 'sumup-terminal-for-woocommerce' ) . '</p>';
+			echo '</div>';
 
-				return;
-			}
+			return;
+		}
+
+		// Check if we can get the merchant code (this will use caching)
+		$merchant_code = $this->profile_service->get_merchant_code();
+		if ( ! $merchant_code ) {
+			echo '<div class="woocommerce-error">';
+			echo '<p>' . esc_html__( 'SumUp Terminal is not properly configured. Please contact the store administrator.', 'sumup-terminal-for-woocommerce' ) . '</p>';
+			echo '</div>';
+
+			return;
 		}
 
 		// Get available readers
@@ -347,10 +349,17 @@ class Gateway extends WC_Payment_Gateway {
 	 * @return bool
 	 */
 	public function process_admin_options() {
-		$result = parent::process_admin_options();
+		$old_api_key = $this->api_key;
+		$result      = parent::process_admin_options();
 		
 		// Reload the API key and reinitialize services.
 		$this->api_key = $this->get_option( 'api_key' );
+		
+		// Clear cache if API key changed
+		if ( $old_api_key !== $this->api_key && $this->profile_service ) {
+			$this->profile_service->clear_cache();
+		}
+		
 		$this->init_services();
 
 		return $result;
@@ -467,14 +476,11 @@ class Gateway extends WC_Payment_Gateway {
 		$this->profile_service = new ProfileService( $this->api_key );
 		$this->reader_service  = new ReaderService( $this->api_key );
 
-		// Set merchant ID if available and API key is set.
-		if ( ! empty( $this->api_key ) ) {
-			$merchant_code = $this->profile_service->get_merchant_code();
-			
-			if ( $merchant_code ) {
-				$this->reader_service->set_merchant_id( $merchant_code );
-			}
-		}
+		// Set the profile service on the reader service for lazy merchant ID loading
+		$this->reader_service->set_profile_service( $this->profile_service );
+
+		// Note: We no longer fetch merchant_code here to avoid unnecessary API calls.
+		// The merchant_code will be fetched lazily when needed and cached.
 	}
 
 
@@ -489,10 +495,10 @@ class Gateway extends WC_Payment_Gateway {
 			return $this->render_status_card( 'error', __( 'API Key Required', 'sumup-terminal-for-woocommerce' ), __( 'Enter your SumUp API Key above to connect to SumUp.', 'sumup-terminal-for-woocommerce' ) );
 		}
 
-		// Test the API key.
-		$api_key_valid = $this->test_api_key();
+		// Get the profile once and use it for all checks (this will use caching)
+		$profile = $this->profile_service->get_profile();
 		
-		if ( ! $api_key_valid ) {
+		if ( ! $profile ) {
 			return $this->render_status_card( 'error', __( 'Connection Failed', 'sumup-terminal-for-woocommerce' ), __( 'Unable to connect to SumUp. Please check your API key.', 'sumup-terminal-for-woocommerce' ) );
 		}
 
@@ -502,9 +508,9 @@ class Gateway extends WC_Payment_Gateway {
 		// 1. API Connection Status.
 		$html .= $this->render_status_card( 'success', __( 'Connected to SumUp', 'sumup-terminal-for-woocommerce' ), __( 'API key is valid and ready to process payments.', 'sumup-terminal-for-woocommerce' ) );
 
-		// 2. Merchant Information.
+		// 2. Merchant Information (pass the profile to avoid another API call).
 		try {
-			$html .= $this->get_merchant_status_html();
+			$html .= $this->get_merchant_status_html( $profile );
 		} catch ( \Exception $e ) {
 			// Silently continue if merchant info fails
 		}
@@ -555,10 +561,15 @@ class Gateway extends WC_Payment_Gateway {
 	/**
 	 * Get merchant status HTML.
 	 *
+	 * @param null|array $profile Optional profile data to use instead of fetching.
+	 *
 	 * @return string HTML for merchant status.
 	 */
-	private function get_merchant_status_html() {
-		$profile = $this->profile_service->get_profile();
+	private function get_merchant_status_html( $profile = null ) {
+		// Use provided profile or fetch if not provided
+		if ( null === $profile ) {
+			$profile = $this->profile_service->get_profile();
+		}
 
 		if ( ! $profile ) {
 			return $this->render_status_card( 'error', __( 'Merchant Profile Error', 'sumup-terminal-for-woocommerce' ), __( 'Unable to retrieve merchant profile information.', 'sumup-terminal-for-woocommerce' ) );
