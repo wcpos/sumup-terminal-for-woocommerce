@@ -399,10 +399,25 @@ app.get('/v0.1/merchants/:merchantCode/readers/:readerId', authenticateToken, (r
 });
 
 app.post('/v0.1/merchants/:merchantCode/readers', authenticateToken, (req, res) => {
-  const { pairing_code } = req.body;
+  const { pairing_code, name } = req.body;
   
   if (!pairing_code) {
     return res.status(400).json({ error: 'Pairing code required' });
+  }
+
+  if (!name) {
+    return res.status(400).json({
+      detail: 'request validation failed',
+      fields: [
+        {
+          name: '',
+          message: "missing property 'name'"
+        }
+      ],
+      status: 400,
+      title: 'Bad Request',
+      type: 'https://developer.sumup.com/problem/bad-request'
+    });
   }
   
   // Simulate pairing success/failure based on code
@@ -412,7 +427,7 @@ app.post('/v0.1/merchants/:merchantCode/readers', authenticateToken, (req, res) 
   
   const newReader = {
     id: `rdr_${Math.random().toString(36).toUpperCase().substr(2, 25)}`,
-    name: `Paired Reader ${pairing_code}`,
+    name,
     status: 'paired',
     device: {
       identifier: `${Math.random().toString(36).toUpperCase().substr(2, 10)}-${Math.random().toString(36).toUpperCase().substr(2, 2)}`,

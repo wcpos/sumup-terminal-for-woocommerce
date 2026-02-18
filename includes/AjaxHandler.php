@@ -52,16 +52,23 @@ class AjaxHandler {
 			wp_send_json_error( __( 'Insufficient permissions', 'sumup-terminal-for-woocommerce' ) );
 		}
 
-		$pairing_code = sanitize_text_field( $_POST['pairing_code'] ?? '' );
+		$pairing_code = sanitize_text_field( wp_unslash( $_POST['pairing_code'] ?? '' ) );
+		$reader_name  = sanitize_text_field( wp_unslash( $_POST['reader_name'] ?? '' ) );
 
 		if ( empty( $pairing_code ) ) {
 			wp_send_json_error( __( 'Pairing code is required', 'sumup-terminal-for-woocommerce' ) );
+		}
+
+		if ( empty( $reader_name ) ) {
+			/* translators: %s: reader pairing code shown on the SumUp terminal. */
+			$reader_name = sprintf( __( 'WCPOS Reader %s', 'sumup-terminal-for-woocommerce' ), $pairing_code );
 		}
 
 		try {
 			$services = $this->get_services();
 			$result   = $services['reader']->create( array(
 				'pairing_code' => $pairing_code,
+				'name'         => $reader_name,
 			) );
 
 			if ( $result ) {
