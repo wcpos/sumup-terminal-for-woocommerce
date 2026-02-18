@@ -8,9 +8,18 @@ if ($ajax_handler === false) {
 	exit(1);
 }
 
-$pattern = '/create\s*\(\s*array\s*\((.*?)\)\s*\)/s';
+$pair_method_start = strpos($ajax_handler, 'public function ajax_pair_reader');
+$pair_method_end   = strpos($ajax_handler, 'public function ajax_unpair_reader');
 
-if (!preg_match($pattern, $ajax_handler, $matches)) {
+if ($pair_method_start === false || $pair_method_end === false || $pair_method_end <= $pair_method_start) {
+	fwrite(STDERR, "Could not isolate ajax_pair_reader() method body.\n");
+	exit(1);
+}
+
+$pair_method = substr($ajax_handler, $pair_method_start, $pair_method_end - $pair_method_start);
+$pattern     = '/create\s*\(\s*array\s*\((.*?)\)\s*\)/s';
+
+if (!preg_match($pattern, $pair_method, $matches)) {
 	fwrite(STDERR, "Could not find reader create payload in ajax_pair_reader().\n");
 	exit(1);
 }
