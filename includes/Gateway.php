@@ -103,6 +103,7 @@ class Gateway extends WC_Payment_Gateway {
 					__( 'Enable SumUp Terminal for web checkout (not necessary for %s)', 'sumup-terminal-for-woocommerce' ),
 					'<a href="https://wcpos.com" target="_blank">WooCommerce POS</a>'
 				),
+				'description' => __( 'This enables the gateway for online store checkout. The POS uses this gateway automatically when configured.', 'sumup-terminal-for-woocommerce' ),
 				'default'     => 'no',
 			),
 			'title' => array(
