@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const { buildWebhookRequestOptions, shouldAllowInsecureTls } = require('./webhook-request');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,26 +23,14 @@ function sendWebhook(webhookUrl, payload, orderId = '') {
   
   const postData = JSON.stringify(payload);
   
-  const options = {
-    hostname: url.hostname,
-    port: url.port || (isHttps ? 443 : 80),
-    path: url.pathname + url.search,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData),
-      'User-Agent': 'SumUp-Mock-Server/1.0'
-    },
-    // Allow self-signed certificates in development
-    rejectUnauthorized: false
-  };
+  const options = buildWebhookRequestOptions(url, postData);
 
   const orderInfo = orderId ? ` (Order ID: ${orderId})` : '';
   console.log(`\n🔔 SENDING WEBHOOK to: ${webhookUrl}${orderInfo}`);
   
   // Warn about SSL certificate handling
-  if (isHttps && url.hostname.includes('.local')) {
-    console.log('⚠️  SSL certificate verification disabled for .local development');
+  if (isHttps && shouldAllowInsecureTls(url)) {
+    console.log('⚠️  SSL certificate verification disabled for local development override');
   }
   
   console.log('Webhook payload:');
