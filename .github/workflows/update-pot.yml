@@ -18,6 +18,8 @@ permissions:
 jobs:
   update-pot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
