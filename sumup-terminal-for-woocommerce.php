@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SumUp Terminal for WooCommerce
  * Description: Adds SumUp Terminal support to WooCommerce for in-person payments.
- * Version:     0.0.7
+ * Version:     0.0.8
  * Author:      kilbot
  * Author URI:  https://kilbot.com/
  * Update URI:  https://github.com/wcpos/sumup-terminal-for-woocommerce
@@ -21,7 +21,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 }
 
 // Define constants.
-\define( 'SUTWC_VERSION', '0.0.7' );
+\define( 'SUTWC_VERSION', '0.0.8' );
 \define( 'SUTWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 \define( 'SUTWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
