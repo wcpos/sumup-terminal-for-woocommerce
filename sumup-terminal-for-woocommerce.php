@@ -5,6 +5,7 @@
  * Version:     0.0.7
  * Author:      kilbot
  * Author URI:  https://kilbot.com/
+ * Update URI:  https://github.com/wcpos/sumup-terminal-for-woocommerce
  * License:     GPL v2 or later
  * Text Domain: sumup-terminal-for-woocommerce.
  *
