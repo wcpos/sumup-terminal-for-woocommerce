@@ -11,11 +11,21 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
 /**
  * Class ReaderService.
  */
-class ReaderService extends HttpClient {
+class ReaderService {
 	/**
-	 * @var null|ProfileService Profile service instance for lazy loading merchant ID.
+	 * @var ReaderApiClientInterface Reader API client.
 	 */
-	private $profile_service;
+	private $client;
+
+	/**
+	 * Constructor for the reader service.
+	 *
+	 * @param string                        $api_key SumUp API key.
+	 * @param null|ReaderApiClientInterface $client  Reader API client.
+	 */
+	public function __construct( $api_key = '', ?ReaderApiClientInterface $client = null ) {
+		$this->client = $client ? $client : ReaderApiClientFactory::create( $api_key );
+	}
 
 	/**
 	 * Set the profile service for lazy loading merchant ID.
@@ -23,97 +33,55 @@ class ReaderService extends HttpClient {
 	 * @param ProfileService $profile_service Profile service instance.
 	 */
 	public function set_profile_service( ProfileService $profile_service ): void {
-		$this->profile_service = $profile_service;
+		$this->client->set_profile_service( $profile_service );
 	}
 
-	/**
-	 * Get all readers for the merchant.
-	 *
-	 * @return array|false Readers data or false on failure.
-	 */
 	public function get_all() {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		$result = parent::get( "/merchants/{$this->get_merchant_id()}/readers" );
-		
-		if ( $result ) {
-			// Check if response has 'items' structure
-			if ( isset( $result['items'] ) && \is_array( $result['items'] ) ) {
-				return $result['items'];
-			}
-
-			return $result;
-		}
-
-		return false;
+		return $this->client->get_all();
 	}
 
-	/**
-	 * Get a specific reader by ID.
-	 *
-	 * @param string $reader_id Reader ID.
-	 *
-	 * @return array|false Reader data or false on failure.
-	 */
 	public function get_reader( $reader_id ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		return parent::get( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}" );
+		return $this->client->get_reader( $reader_id );
 	}
 
-	/**
-	 * Create/register a new reader.
-	 *
-	 * @param array $data Reader data.
-	 *
-	 * @return array|false Reader data or false on failure.
-	 */
 	public function create( array $data ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		return parent::post( "/merchants/{$this->get_merchant_id()}/readers", $data );
+		return $this->client->create( $data );
 	}
 
-	/**
-	 * Delete/unregister a reader.
-	 *
-	 * @param string $reader_id Reader ID.
-	 *
-	 * @return bool True on success, false on failure.
-	 */
 	public function destroy( $reader_id ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		$response = parent::delete( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}" );
-
-		return $response && ( $response['success'] ?? true );
+		return $this->client->destroy( $reader_id );
 	}
 
-	/**
-	 * Initiate a checkout on a specific reader.
-	 *
-	 * @param string $reader_id     Reader ID.
-	 * @param array  $checkout_data Checkout data.
-	 *
-	 * @return array|false Checkout response or false on failure.
-	 */
 	public function checkout( $reader_id, $checkout_data ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
+		return $this->client->checkout( $reader_id, $checkout_data );
+	}
 
-		return parent::post(
-			"/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/checkout",
-			$checkout_data
-		);
+	public function cancel_checkout( $reader_id ) {
+		return $this->client->cancel_checkout( $reader_id );
+	}
+
+	public function get_status( $reader_id ) {
+		return $this->client->get_status( $reader_id );
+	}
+
+	public function connect( $reader_id ) {
+		return $this->client->connect( $reader_id );
+	}
+
+	public function disconnect( $reader_id ) {
+		return $this->client->disconnect( $reader_id );
+	}
+
+	public function set_merchant_id( $merchant_id ): void {
+		$this->client->set_merchant_id( $merchant_id );
+	}
+
+	public function get_merchant_id() {
+		return $this->client->get_merchant_id();
+	}
+
+	public function has_api_key() {
+		return $this->client->has_api_key();
 	}
 
 	/**
@@ -125,7 +93,7 @@ class ReaderService extends HttpClient {
 	 * @return array|false Checkout data or false on failure.
 	 */
 	public function create_checkout_for_order( $order, $reader_id ) {
-		if ( ! $this->has_api_key() || ! $this->ensure_merchant_id() ) {
+		if ( ! $this->client->has_api_key() ) {
 			return false;
 		}
 
@@ -153,123 +121,28 @@ class ReaderService extends HttpClient {
 
 		// Construct webhook URL using WordPress AJAX with user-independent token and order ID
 		$webhook_token = $this->generate_webhook_token( $order->get_id() );
-		
-		$checkout_data['return_url'] = add_query_arg( array(
-			'action'   => 'sumup_webhook',
-			'nonce'    => $webhook_token,
-			'order_id' => $order->get_id(),
-		), admin_url( 'admin-ajax.php' ) );
+
+		$checkout_data['return_url'] = add_query_arg(
+			array(
+				'action'   => 'sumup_webhook',
+				'nonce'    => $webhook_token,
+				'order_id' => $order->get_id(),
+			),
+			admin_url( 'admin-ajax.php' )
+		);
 
 		$result = $this->checkout( $reader_id, $checkout_data );
-		
+
 		// If successful, save the transaction ID to the order
 		if ( $result && isset( $result['data']['client_transaction_id'] ) ) {
 			$transaction_id = $result['data']['client_transaction_id'];
 			$order->set_transaction_id( $transaction_id );
 			$order->save();
-			
+
 			Logger::log( 'SumUp transaction ID saved: ' . $transaction_id . ' for order: ' . $order->get_id() );
 		}
 
 		return $result;
-	}
-
-	/**
-	 * Cancel/terminate a checkout on a reader.
-	 *
-	 * Note: This is an asynchronous operation. The API only confirms the terminate
-	 * request was accepted, but actual termination may take time. If successful,
-	 * a webhook will be sent to the return_url with status "FAILED".
-	 *
-	 * @param string $reader_id Reader ID.
-	 *
-	 * @return bool True if terminate request was accepted, false if rejected.
-	 */
-	public function cancel_checkout( $reader_id ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		// According to SumUp API docs, terminate action is sent to the reader
-		// This is asynchronous - no confirmation of actual termination
-		// No request body is required for terminate
-		$response = parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/terminate" );
-
-		// SumUp API returns HTTP 204 (no content) for terminate requests
-		// We consider it successful if the request was sent (no network error)
-		// The actual termination result will come via webhook to return_url
-		return ! is_wp_error( $response );
-	}
-
-	/**
-	 * Get the status of a reader.
-	 *
-	 * @param string $reader_id Reader ID.
-	 *
-	 * @return array|false Reader status or false on failure.
-	 */
-	public function get_status( $reader_id ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		return parent::get( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/status" );
-	}
-
-	/**
-	 * Connect to a reader.
-	 *
-	 * @param string $reader_id Reader ID.
-	 *
-	 * @return array|false Connection response or false on failure.
-	 */
-	public function connect( $reader_id ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		return parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/connect" );
-	}
-
-	/**
-	 * Disconnect from a reader.
-	 *
-	 * @param string $reader_id Reader ID.
-	 *
-	 * @return bool True on success, false on failure.
-	 */
-	public function disconnect( $reader_id ) {
-		if ( ! $this->ensure_merchant_id() ) {
-			return false;
-		}
-
-		$response = parent::post( "/merchants/{$this->get_merchant_id()}/readers/{$reader_id}/disconnect" );
-
-		return $response && ( $response['success'] ?? true );
-	}
-
-	/**
-	 * Get merchant ID, fetching it lazily if not set.
-	 *
-	 * @return null|string Merchant ID or null if unavailable.
-	 */
-	private function ensure_merchant_id() {
-		// If merchant ID is already set, return it
-		if ( $this->get_merchant_id() ) {
-			return $this->get_merchant_id();
-		}
-
-		// Try to fetch it from the profile service
-		if ( $this->profile_service ) {
-			$merchant_code = $this->profile_service->get_merchant_code();
-			if ( $merchant_code ) {
-				$this->set_merchant_id( $merchant_code );
-
-				return $merchant_code;
-			}
-		}
-
-		return null;
 	}
 
 	/**
@@ -284,7 +157,7 @@ class ReaderService extends HttpClient {
 		// Create a deterministic token based on order ID and WordPress salts
 		// This is user-independent but specific to this WordPress installation
 		$data = 'sumup_webhook_' . $order_id . wp_salt( 'nonce' );
-		
+
 		return substr( wp_hash( $data ), 0, 10 );
 	}
 }

@@ -1,0 +1,152 @@
+<?php
+
+declare(strict_types=1);
+
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
+
+/**
+ * Transaction entry returned in history listing responses.
+ */
+class TransactionHistory
+{
+    /**
+     * Unique ID of the transaction.
+     *
+     * @var string|null
+     */
+    public ?string $id = null;
+
+    /**
+     * Transaction code returned by the acquirer/processing entity after processing the transaction.
+     *
+     * @var string|null
+     */
+    public ?string $transactionCode = null;
+
+    /**
+     * Total amount of the transaction.
+     *
+     * @var float|null
+     */
+    public ?float $amount = null;
+
+    /**
+     * Three-letter [ISO4217](https://en.wikipedia.org/wiki/ISO_4217) code of the currency for the amount. Currently supported currency values are enumerated above.
+     *
+     * @var string|null
+     */
+    public ?string $currency = null;
+
+    /**
+     * Date and time of the creation of the transaction. Response format expressed according to [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) code.
+     *
+     * @var string|null
+     */
+    public ?string $timestamp = null;
+
+    /**
+     * Current status of the transaction.
+     *
+     * @var string|null
+     */
+    public ?string $status = null;
+
+    /**
+     * Payment type used for the transaction.
+     *
+     * @var string|null
+     */
+    public ?string $paymentType = null;
+
+    /**
+     * Current number of the installment for deferred payments.
+     *
+     * @var int|null
+     */
+    public ?int $installmentsCount = null;
+
+    /**
+     * Short description of the payment. The value is taken from the `description` property of the related checkout resource.
+     *
+     * @var string|null
+     */
+    public ?string $productSummary = null;
+
+    /**
+     * Total number of payouts to the registered user specified in the `user` property.
+     *
+     * @var int|null
+     */
+    public ?int $payoutsTotal = null;
+
+    /**
+     * Number of payouts that are made to the registered user specified in the `user` property.
+     *
+     * @var int|null
+     */
+    public ?int $payoutsReceived = null;
+
+    /**
+     * Payout plan of the registered user at the time when the transaction was made.
+     *
+     * @var string|null
+     */
+    public ?string $payoutPlan = null;
+
+    /**
+     * Unique ID of the transaction.
+     *
+     * @var string|null
+     */
+    public ?string $transactionId = null;
+
+    /**
+     * Client-specific ID of the transaction.
+     *
+     * @var string|null
+     */
+    public ?string $clientTransactionId = null;
+
+    /**
+     * Email address of the registered user (merchant) to whom the payment is made.
+     *
+     * @var string|null
+     */
+    public ?string $user = null;
+
+    /**
+     * Type of the transaction for the registered user specified in the `user` property.
+     *
+     * @var TransactionHistoryType|null
+     */
+    public ?TransactionHistoryType $type = null;
+
+    /**
+     * Issuing card network of the payment card used for the transaction.
+     *
+     * @var TransactionHistoryCardType|null
+     */
+    public ?TransactionHistoryCardType $cardType = null;
+
+    /**
+     * Payout date (if paid out at once).
+     *
+     * @var string|null
+     */
+    public ?string $payoutDate = null;
+
+    /**
+     * Payout type.
+     *
+     * @var TransactionHistoryPayoutType|null
+     */
+    public ?TransactionHistoryPayoutType $payoutType = null;
+
+    /**
+     * Total refunded amount.
+     *
+     * @var float|null
+     */
+    public ?float $refundedAmount = null;
+
+}

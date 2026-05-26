@@ -10,6 +10,7 @@ use WC_Payment_Gateway;
 
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\SdkAvailability;
 
 /**
  * Class SumUpTerminalGateway.
@@ -149,6 +150,8 @@ class Gateway extends WC_Payment_Gateway {
 	 */
 	public function admin_options(): void {
 		parent::admin_options();
+
+		echo wp_kses_post( $this->get_sdk_status_html() );
 
 		// Add Connection Status section outside of form fields
 		?>
@@ -522,6 +525,28 @@ class Gateway extends WC_Payment_Gateway {
 		} catch ( \Exception $e ) {
 			// Silently continue if reader status fails
 		}
+
+		return $html;
+	}
+
+	/**
+	 * Get the SDK status HTML for display.
+	 *
+	 * @return string HTML for SDK status.
+	 */
+	private function get_sdk_status_html() {
+		$type = SdkAvailability::is_sdk_available() ? 'success' : 'info';
+
+		$html  = '<table class="form-table">';
+		$html .= '<tr valign="top">';
+		$html .= '<th scope="row" class="titledesc">';
+		$html .= '<label>' . esc_html__( 'SumUp SDK Status', 'sumup-terminal-for-woocommerce' ) . '</label>';
+		$html .= '</th>';
+		$html .= '<td class="forminp">';
+		$html .= $this->render_status_card( $type, __( 'Terminal API Client', 'sumup-terminal-for-woocommerce' ), SdkAvailability::get_status_message() );
+		$html .= '</td>';
+		$html .= '</tr>';
+		$html .= '</table>';
 
 		return $html;
 	}

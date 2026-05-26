@@ -24,12 +24,21 @@ if ( ! \defined( 'ABSPATH' ) ) {
 \define( 'SUTWC_VERSION', '0.0.8' );
 \define( 'SUTWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 \define( 'SUTWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+\define( 'SUTWC_MINIMUM_PHP_VERSION', '7.4' );
+\define( 'SUTWC_MINIMUM_PHP_VERSION_ID', 70400 );
 
 // Include Composer's autoloader.
 if ( file_exists( SUTWC_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
 	require_once SUTWC_PLUGIN_DIR . 'vendor/autoload.php';
 } else {
 	Logger::log( 'SumUp Terminal for WooCommerce: Composer autoloader not found.' );
+}
+
+// Include the prefixed official SumUp SDK only on PHP versions that can parse it.
+// This runtime guard must happen before requiring the SDK autoloader.
+$sutwc_prefixed_sumup_autoload = SUTWC_PLUGIN_DIR . 'vendor_prefixed/sumup-sdk-autoload.php';
+if ( PHP_VERSION_ID >= 80200 && file_exists( $sutwc_prefixed_sumup_autoload ) ) {
+	require_once $sutwc_prefixed_sumup_autoload;
 }
 
 // Autoload classes using PSR-4.
@@ -51,6 +60,31 @@ spl_autoload_register(
 		}
 	}
 );
+
+/**
+ * Validate runtime requirements during plugin activation.
+ */
+function sutwc_activate(): void {
+	if ( PHP_VERSION_ID >= SUTWC_MINIMUM_PHP_VERSION_ID ) {
+		return;
+	}
+
+	deactivate_plugins( plugin_basename( __FILE__ ) );
+
+	wp_die(
+		esc_html(
+			sprintf(
+				/* translators: 1: required PHP version, 2: current PHP version. */
+				__( 'SumUp Terminal for WooCommerce requires PHP %1$s or newer. Your server is running PHP %2$s.', 'sumup-terminal-for-woocommerce' ),
+				SUTWC_MINIMUM_PHP_VERSION,
+				PHP_VERSION
+			)
+		),
+		esc_html__( 'Plugin activation failed', 'sumup-terminal-for-woocommerce' ),
+		array( 'back_link' => true )
+	);
+}
+register_activation_hook( __FILE__, __NAMESPACE__ . '\\sutwc_activate' );
 
 /**
  * Initialize the plugin.
