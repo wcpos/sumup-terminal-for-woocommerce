@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Members;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Members;
 
-namespace SumUp\Services;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
 
-use SumUp\HttpClient\HttpClientInterface;
-use SumUp\HttpClient\RequestHeaders;
-use SumUp\HttpClient\RequestOptions;
-use SumUp\RequestEncoder;
-use SumUp\ResponseDecoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClientInterface;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
 
 class MembersCreateRequest
 {
@@ -83,7 +83,7 @@ class MembersCreateRequest
         ?array $metadata = null,
         ?array $attributes = null
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'email' => $email,
             'roles' => $roles,
             'is_managed_user' => $isManagedUser,
@@ -107,7 +107,7 @@ class MembersCreateRequest
         ]);
 
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }
@@ -170,7 +170,7 @@ class MembersUpdateRequest
         ?array $attributes = null,
         ?MembersUpdateRequestUser $user = null
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'roles' => $roles,
             'metadata' => $metadata,
             'attributes' => $attributes,
@@ -186,7 +186,7 @@ class MembersUpdateRequest
     public static function fromArray(array $data): self
     {
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }
@@ -197,7 +197,7 @@ class MembersListResponse
 {
     /**
      *
-     * @var \SumUp\Types\Member[]
+     * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member[]
      */
     public array $items;
 
@@ -330,13 +330,13 @@ class Members implements SumUpService
      * @param MembersCreateRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Member
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function create(string $merchantCode, MembersCreateRequest|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\Member
+    public function create(string $merchantCode, MembersCreateRequest|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member
     {
         $path = sprintf('/v0.1/merchants/%s/members', rawurlencode((string) $merchantCode));
         $payload = [];
@@ -350,11 +350,11 @@ class Members implements SumUpService
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
 
         return ResponseDecoder::decodeOrThrow($response, [
-            '201' => ['type' => 'class', 'class' => \SumUp\Types\Member::class],
+            '201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member::class],
         ], [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '429' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '429' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'POST', $path);
     }
 
@@ -366,10 +366,10 @@ class Members implements SumUpService
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return null
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function delete(string $merchantCode, string $memberId, ?RequestOptions $requestOptions = null): null
     {
@@ -382,7 +382,7 @@ class Members implements SumUpService
         return ResponseDecoder::decodeOrThrow($response, [
             '200' => ['type' => 'void'],
         ], [
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'DELETE', $path);
     }
 
@@ -393,13 +393,13 @@ class Members implements SumUpService
      * @param string $memberId The ID of the member to retrieve.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Member
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function get(string $merchantCode, string $memberId, ?RequestOptions $requestOptions = null): \SumUp\Types\Member
+    public function get(string $merchantCode, string $memberId, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member
     {
         $path = sprintf('/v0.1/merchants/%s/members/%s', rawurlencode((string) $merchantCode), rawurlencode((string) $memberId));
         $payload = [];
@@ -407,8 +407,8 @@ class Members implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\Member::class, [
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member::class, [
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -419,13 +419,13 @@ class Members implements SumUpService
      * @param MembersListParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Services\MembersListResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\MembersListResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function list(string $merchantCode, ?MembersListParams $queryParams = null, ?RequestOptions $requestOptions = null): \SumUp\Services\MembersListResponse
+    public function list(string $merchantCode, ?MembersListParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\MembersListResponse
     {
         $path = sprintf('/v0.1/merchants/%s/members', rawurlencode((string) $merchantCode));
         if ($queryParams !== null) {
@@ -463,8 +463,8 @@ class Members implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Services\MembersListResponse::class, [
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\MembersListResponse::class, [
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -476,13 +476,13 @@ class Members implements SumUpService
      * @param MembersUpdateRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Member
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function update(string $merchantCode, string $memberId, MembersUpdateRequest|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\Member
+    public function update(string $merchantCode, string $memberId, MembersUpdateRequest|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member
     {
         $path = sprintf('/v0.1/merchants/%s/members/%s', rawurlencode((string) $merchantCode), rawurlencode((string) $memberId));
         $payload = [];
@@ -495,11 +495,11 @@ class Members implements SumUpService
 
         $response = $this->client->send('PUT', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\Member::class, [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '409' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Member::class, [
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'PUT', $path);
     }
 }

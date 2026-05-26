@@ -46,6 +46,7 @@
         "prefix-dependencies": [
             "composer --working-dir=php-scoper install --no-dev --optimize-autoloader",
             "php php-scoper/vendor/bin/php-scoper add-prefix --config=php-scoper/scoper.inc.php --output-dir=vendor_prefixed/sumup-sdk --force",
+            "php tools/prefix-sumup-sdk-namespaces.php",
             "php tools/generate-prefixed-sumup-autoload.php",
             "composer dump-autoload -o"
         ]

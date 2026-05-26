@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Types;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Settings used to apply the Merchant's branding to email receipts, invoices, checkouts, and other products.

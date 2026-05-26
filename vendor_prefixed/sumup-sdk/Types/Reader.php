@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Types;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * A physical card reader device that can accept in-person payments.

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Readers;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Readers;
 
-namespace SumUp\Services;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
 
-use SumUp\HttpClient\HttpClientInterface;
-use SumUp\HttpClient\RequestHeaders;
-use SumUp\HttpClient\RequestOptions;
-use SumUp\RequestEncoder;
-use SumUp\ResponseDecoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClientInterface;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
 
 class ReadersCreateRequest
 {
@@ -47,7 +47,7 @@ class ReadersCreateRequest
         string $name,
         ?array $metadata = null
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'pairing_code' => $pairingCode,
             'name' => $name,
             'metadata' => $metadata,
@@ -67,7 +67,7 @@ class ReadersCreateRequest
         ]);
 
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }
@@ -131,7 +131,7 @@ class ReadersUpdateRequest
         ?string $name = null,
         ?array $metadata = null
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'name' => $name,
             'metadata' => $metadata,
         ], self::class, $this);
@@ -145,7 +145,7 @@ class ReadersUpdateRequest
     public static function fromArray(array $data): self
     {
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }
@@ -156,7 +156,7 @@ class ReadersListResponse
 {
     /**
      *
-     * @var \SumUp\Types\Reader[]
+     * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader[]
      */
     public array $items;
 
@@ -204,13 +204,13 @@ class Readers implements SumUpService
      * @param ReadersCreateRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Reader
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function create(string $merchantCode, ReadersCreateRequest|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\Reader
+    public function create(string $merchantCode, ReadersCreateRequest|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader
     {
         $path = sprintf('/v0.1/merchants/%s/readers', rawurlencode((string) $merchantCode));
         $payload = [];
@@ -224,11 +224,11 @@ class Readers implements SumUpService
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
 
         return ResponseDecoder::decodeOrThrow($response, [
-            '201' => ['type' => 'class', 'class' => \SumUp\Types\Reader::class],
+            '201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader::class],
         ], [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '409' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'POST', $path);
     }
 
@@ -237,22 +237,22 @@ class Readers implements SumUpService
      *
      * @param string $merchantCode Merchant Code
      * @param string $readerId The unique identifier of the Reader
-     * @param \SumUp\Types\CreateReaderCheckoutRequest|array<string, mixed> $body Required request payload
+     * @param \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CreateReaderCheckoutRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\CreateReaderCheckoutResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CreateReaderCheckoutResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function createCheckout(string $merchantCode, string $readerId, \SumUp\Types\CreateReaderCheckoutRequest|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\CreateReaderCheckoutResponse
+    public function createCheckout(string $merchantCode, string $readerId, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CreateReaderCheckoutRequest|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CreateReaderCheckoutResponse
     {
         $path = sprintf('/v0.1/merchants/%s/readers/%s/checkout', rawurlencode((string) $merchantCode), rawurlencode((string) $readerId));
         $payload = [];
         $requestBody = $body;
         if (is_array($requestBody)) {
-            $requestBody = \SumUp\Types\CreateReaderCheckoutRequest::fromArray($requestBody);
+            $requestBody = \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CreateReaderCheckoutRequest::fromArray($requestBody);
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
@@ -260,12 +260,12 @@ class Readers implements SumUpService
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
 
         return ResponseDecoder::decodeOrThrow($response, [
-            '201' => ['type' => 'class', 'class' => \SumUp\Types\CreateReaderCheckoutResponse::class],
+            '201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CreateReaderCheckoutResponse::class],
         ], [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '422' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '422' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'POST', $path);
     }
 
@@ -277,10 +277,10 @@ class Readers implements SumUpService
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return null
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function delete(string $merchantCode, string $id, ?RequestOptions $requestOptions = null): null
     {
@@ -293,7 +293,7 @@ class Readers implements SumUpService
         return ResponseDecoder::decodeOrThrow($response, [
             '200' => ['type' => 'void'],
         ], [
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'DELETE', $path);
     }
 
@@ -304,13 +304,13 @@ class Readers implements SumUpService
      * @param string $id The unique identifier of the reader.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Reader
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function get(string $merchantCode, string $id, ?RequestOptions $requestOptions = null): \SumUp\Types\Reader
+    public function get(string $merchantCode, string $id, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader
     {
         $path = sprintf('/v0.1/merchants/%s/readers/%s', rawurlencode((string) $merchantCode), rawurlencode((string) $id));
         $payload = [];
@@ -318,8 +318,8 @@ class Readers implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\Reader::class, [
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader::class, [
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -330,13 +330,13 @@ class Readers implements SumUpService
      * @param string $readerId The unique identifier of the Reader
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\StatusResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\StatusResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function getStatus(string $merchantCode, string $readerId, ?RequestOptions $requestOptions = null): \SumUp\Types\StatusResponse
+    public function getStatus(string $merchantCode, string $readerId, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\StatusResponse
     {
         $path = sprintf('/v0.1/merchants/%s/readers/%s/status', rawurlencode((string) $merchantCode), rawurlencode((string) $readerId));
         $payload = [];
@@ -344,10 +344,10 @@ class Readers implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\StatusResponse::class, [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\StatusResponse::class, [
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -357,13 +357,13 @@ class Readers implements SumUpService
      * @param string $merchantCode Short unique identifier for the merchant.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Services\ReadersListResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\ReadersListResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function list(string $merchantCode, ?RequestOptions $requestOptions = null): \SumUp\Services\ReadersListResponse
+    public function list(string $merchantCode, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\ReadersListResponse
     {
         $path = sprintf('/v0.1/merchants/%s/readers', rawurlencode((string) $merchantCode));
         $payload = [];
@@ -371,8 +371,8 @@ class Readers implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Services\ReadersListResponse::class, [
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\ReadersListResponse::class, [
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -385,10 +385,10 @@ class Readers implements SumUpService
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return null
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function terminateCheckout(string $merchantCode, string $readerId, ReadersTerminateCheckoutRequest|array|null $body = null, ?RequestOptions $requestOptions = null): null
     {
@@ -408,10 +408,10 @@ class Readers implements SumUpService
         return ResponseDecoder::decodeOrThrow($response, [
             '202' => ['type' => 'void'],
         ], [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '422' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '422' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'POST', $path);
     }
 
@@ -423,13 +423,13 @@ class Readers implements SumUpService
      * @param ReadersUpdateRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Reader
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function update(string $merchantCode, string $id, ReadersUpdateRequest|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\Reader
+    public function update(string $merchantCode, string $id, ReadersUpdateRequest|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader
     {
         $path = sprintf('/v0.1/merchants/%s/readers/%s', rawurlencode((string) $merchantCode), rawurlencode((string) $id));
         $payload = [];
@@ -442,9 +442,9 @@ class Readers implements SumUpService
 
         $response = $this->client->send('PATCH', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\Reader::class, [
-            '403' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Reader::class, [
+            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'PATCH', $path);
     }
 }

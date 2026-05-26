@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Types;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Transaction event details as rendered on the receipt.

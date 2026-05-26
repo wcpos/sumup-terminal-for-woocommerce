@@ -2,7 +2,7 @@
 
 // File generated from our OpenAPI spec
 
-namespace SumUp;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 
 class ApiVersion
 {

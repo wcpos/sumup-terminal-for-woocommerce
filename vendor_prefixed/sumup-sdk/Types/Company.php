@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Types;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Information about the company or business. This is legal information that is used for verification.

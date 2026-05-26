@@ -1,6 +1,6 @@
 <?php
 
-namespace SumUp;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 
 /**
  * Encodes request DTO objects into payload arrays.

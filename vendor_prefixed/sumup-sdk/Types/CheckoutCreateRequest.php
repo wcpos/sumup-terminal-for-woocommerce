@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Types;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Request body for creating a checkout before processing payment. Define the payment amount, currency, merchant, and optional customer or redirect behavior here.
@@ -114,7 +114,7 @@ class CheckoutCreateRequest
         ?string $redirectUrl = null,
         ?HostedCheckout $hostedCheckout = null
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'checkout_reference' => $checkoutReference,
             'amount' => $amount,
             'currency' => $currency,
@@ -144,7 +144,7 @@ class CheckoutCreateRequest
         ]);
 
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }

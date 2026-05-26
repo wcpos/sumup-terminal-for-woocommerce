@@ -1,6 +1,6 @@
 <?php
 
-namespace SumUp\Services;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
 
 /**
  * Interface SumUpService

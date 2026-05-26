@@ -1,24 +1,24 @@
 <?php
 
-namespace SumUp;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 
-use SumUp\Exception\ConfigurationException;
-use SumUp\Exception\SDKException;
-use SumUp\HttpClient\CurlClient;
-use SumUp\HttpClient\HttpClientInterface;
-use SumUp\HttpClient\RequestHeaders;
-use SumUp\HttpClient\RequestOptions;
-use SumUp\HttpClient\Response;
-use SumUp\Services\Checkouts;
-use SumUp\Services\Customers;
-use SumUp\Services\Members;
-use SumUp\Services\Memberships;
-use SumUp\Services\Merchants;
-use SumUp\Services\Payouts;
-use SumUp\Services\Readers;
-use SumUp\Services\Receipts;
-use SumUp\Services\Roles;
-use SumUp\Services\Transactions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConfigurationException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\CurlClient;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClientInterface;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\Response;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Checkouts;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Customers;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Members;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Memberships;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Merchants;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Payouts;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Readers;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Receipts;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Roles;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Transactions;
 
 /**
  * Class SumUp

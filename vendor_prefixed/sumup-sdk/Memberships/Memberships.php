@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Memberships;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Memberships;
 
-namespace SumUp\Services;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
 
-use SumUp\HttpClient\HttpClientInterface;
-use SumUp\HttpClient\RequestHeaders;
-use SumUp\HttpClient\RequestOptions;
-use SumUp\ResponseDecoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClientInterface;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
 
 class MembershipsListResponse
 {
     /**
      *
-     * @var \SumUp\Types\Membership[]
+     * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Membership[]
      */
     public array $items;
 
@@ -149,13 +149,13 @@ class Memberships implements SumUpService
      * @param MembershipsListParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Services\MembershipsListResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\MembershipsListResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function list(?MembershipsListParams $queryParams = null, ?RequestOptions $requestOptions = null): \SumUp\Services\MembershipsListResponse
+    public function list(?MembershipsListParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\MembershipsListResponse
     {
         $path = '/v0.1/memberships';
         if ($queryParams !== null) {
@@ -202,9 +202,9 @@ class Memberships implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Services\MembershipsListResponse::class, [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\MembershipsListResponse::class, [
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 }

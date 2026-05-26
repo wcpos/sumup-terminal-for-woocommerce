@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Checkouts;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Checkouts;
 
-namespace SumUp\Services;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
 
-use SumUp\HttpClient\HttpClientInterface;
-use SumUp\HttpClient\RequestHeaders;
-use SumUp\HttpClient\RequestOptions;
-use SumUp\RequestEncoder;
-use SumUp\ResponseDecoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClientInterface;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
 
 class CheckoutsCreateApplePaySessionRequest
 {
@@ -38,7 +38,7 @@ class CheckoutsCreateApplePaySessionRequest
         string $context,
         string $target
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'context' => $context,
             'target' => $target,
         ], self::class, $this);
@@ -57,7 +57,7 @@ class CheckoutsCreateApplePaySessionRequest
         ]);
 
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }
@@ -188,22 +188,22 @@ class Checkouts implements SumUpService
     /**
      * Create a checkout
      *
-     * @param \SumUp\Types\CheckoutCreateRequest|array<string, mixed> $body Required request payload
+     * @param \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutCreateRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Checkout
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Checkout
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function create(\SumUp\Types\CheckoutCreateRequest|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\Checkout
+    public function create(\WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutCreateRequest|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Checkout
     {
         $path = '/v0.1/checkouts';
         $payload = [];
         $requestBody = $body;
         if (is_array($requestBody)) {
-            $requestBody = \SumUp\Types\CheckoutCreateRequest::fromArray($requestBody);
+            $requestBody = \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutCreateRequest::fromArray($requestBody);
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
@@ -211,12 +211,12 @@ class Checkouts implements SumUpService
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
 
         return ResponseDecoder::decodeOrThrow($response, [
-            '201' => ['type' => 'class', 'class' => \SumUp\Types\Checkout::class],
+            '201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Checkout::class],
         ], [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\ErrorExtended::class],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \SumUp\Types\ErrorForbidden::class],
-            '409' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorExtended::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class],
+            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'POST', $path);
     }
 
@@ -228,10 +228,10 @@ class Checkouts implements SumUpService
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return array<string, mixed>
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function createApplePaySession(string $id, CheckoutsCreateApplePaySessionRequest|array|null $body = null, ?RequestOptions $requestOptions = null): array
     {
@@ -252,7 +252,7 @@ class Checkouts implements SumUpService
             '200' => ['type' => 'object'],
         ], [
             '400' => ['type' => 'mixed'],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'PUT', $path);
     }
 
@@ -262,13 +262,13 @@ class Checkouts implements SumUpService
      * @param string $id Unique ID of the checkout resource.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\Checkout
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Checkout
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function deactivate(string $id, ?RequestOptions $requestOptions = null): \SumUp\Types\Checkout
+    public function deactivate(string $id, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Checkout
     {
         $path = sprintf('/v0.1/checkouts/%s', rawurlencode((string) $id));
         $payload = [];
@@ -276,10 +276,10 @@ class Checkouts implements SumUpService
 
         $response = $this->client->send('DELETE', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\Checkout::class, [
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
-            '409' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Checkout::class, [
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
+            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'DELETE', $path);
     }
 
@@ -289,13 +289,13 @@ class Checkouts implements SumUpService
      * @param string $id Unique ID of the checkout resource.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\CheckoutSuccess
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function get(string $id, ?RequestOptions $requestOptions = null): \SumUp\Types\CheckoutSuccess
+    public function get(string $id, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess
     {
         $path = sprintf('/v0.1/checkouts/%s', rawurlencode((string) $id));
         $payload = [];
@@ -303,9 +303,9 @@ class Checkouts implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\CheckoutSuccess::class, [
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess::class, [
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'GET', $path);
     }
 
@@ -315,11 +315,11 @@ class Checkouts implements SumUpService
      * @param CheckoutsListParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\CheckoutSuccess[]
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess[]
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function list(?CheckoutsListParams $queryParams = null, ?RequestOptions $requestOptions = null): array
     {
@@ -342,9 +342,9 @@ class Checkouts implements SumUpService
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
         return ResponseDecoder::decodeOrThrow($response, [
-            '200' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \SumUp\Types\CheckoutSuccess::class]],
+            '200' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess::class]],
         ], [
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -355,13 +355,13 @@ class Checkouts implements SumUpService
      * @param CheckoutsListAvailablePaymentMethodsParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Services\CheckoutsListAvailablePaymentMethodsResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\CheckoutsListAvailablePaymentMethodsResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function listAvailablePaymentMethods(string $merchantCode, ?CheckoutsListAvailablePaymentMethodsParams $queryParams = null, ?RequestOptions $requestOptions = null): \SumUp\Services\CheckoutsListAvailablePaymentMethodsResponse
+    public function listAvailablePaymentMethods(string $merchantCode, ?CheckoutsListAvailablePaymentMethodsParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\CheckoutsListAvailablePaymentMethodsResponse
     {
         $path = sprintf('/v0.1/merchants/%s/payment-methods', rawurlencode((string) $merchantCode));
         if ($queryParams !== null) {
@@ -384,8 +384,8 @@ class Checkouts implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Services\CheckoutsListAvailablePaymentMethodsResponse::class, [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\DetailsError::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\CheckoutsListAvailablePaymentMethodsResponse::class, [
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\DetailsError::class],
         ], 'GET', $path);
     }
 
@@ -393,22 +393,22 @@ class Checkouts implements SumUpService
      * Process a checkout
      *
      * @param string $id Unique ID of the checkout resource.
-     * @param \SumUp\Types\ProcessCheckout|array<string, mixed> $body Required request payload
+     * @param \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ProcessCheckout|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\CheckoutSuccess|\SumUp\Types\CheckoutAccepted
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess|\WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutAccepted
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function process(string $id, \SumUp\Types\ProcessCheckout|array $body, ?RequestOptions $requestOptions = null): \SumUp\Types\CheckoutSuccess|\SumUp\Types\CheckoutAccepted
+    public function process(string $id, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ProcessCheckout|array $body, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess|\WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutAccepted
     {
         $path = sprintf('/v0.1/checkouts/%s', rawurlencode((string) $id));
         $payload = [];
         $requestBody = $body;
         if (is_array($requestBody)) {
-            $requestBody = \SumUp\Types\ProcessCheckout::fromArray($requestBody);
+            $requestBody = \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ProcessCheckout::fromArray($requestBody);
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
@@ -416,13 +416,13 @@ class Checkouts implements SumUpService
         $response = $this->client->send('PUT', $path, $payload, $headers, $requestOptions);
 
         return ResponseDecoder::decodeOrThrow($response, [
-            '200' => ['type' => 'class', 'class' => \SumUp\Types\CheckoutSuccess::class],
-            '202' => ['type' => 'class', 'class' => \SumUp\Types\CheckoutAccepted::class],
+            '200' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutSuccess::class],
+            '202' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\CheckoutAccepted::class],
         ], [
             '400' => ['type' => 'mixed'],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
-            '409' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
+            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'PUT', $path);
     }
 }

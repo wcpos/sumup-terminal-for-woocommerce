@@ -1,10 +1,10 @@
 <?php
 
-namespace SumUp;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 
-use SumUp\Exception\ApiException;
-use SumUp\Exception\UnexpectedApiException;
-use SumUp\HttpClient\Response;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\Response;
 
 /**
  * Converts HTTP responses into SDK models or scalar values.

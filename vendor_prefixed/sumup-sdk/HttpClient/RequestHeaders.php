@@ -1,8 +1,8 @@
 <?php
 
-namespace SumUp\HttpClient;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient;
 
-use SumUp\SdkInfo;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\SdkInfo;
 
 /**
  * Builds the standard SDK headers for outbound requests.

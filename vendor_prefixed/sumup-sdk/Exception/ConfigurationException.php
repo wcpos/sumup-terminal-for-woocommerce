@@ -1,6 +1,6 @@
 <?php
 
-namespace SumUp\Exception;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception;
 
 /**
  * Class ConfigurationException

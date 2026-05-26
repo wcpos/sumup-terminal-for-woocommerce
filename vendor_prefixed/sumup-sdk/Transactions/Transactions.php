@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace SumUp\Transactions;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Transactions;
 
-namespace SumUp\Services;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
 
-use SumUp\HttpClient\HttpClientInterface;
-use SumUp\HttpClient\RequestHeaders;
-use SumUp\HttpClient\RequestOptions;
-use SumUp\RequestEncoder;
-use SumUp\ResponseDecoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClientInterface;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
 
 /**
  * Optional amount for partial refunds of transactions.
@@ -32,7 +32,7 @@ class TransactionsRefundRequest
     public function __construct(
         ?float $amount = null
     ) {
-        \SumUp\Hydrator::hydrate([
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
             'amount' => $amount,
         ], self::class, $this);
     }
@@ -45,7 +45,7 @@ class TransactionsRefundRequest
     public static function fromArray(array $data): self
     {
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
-        \SumUp\Hydrator::hydrate($data, self::class, $request);
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
 
         return $request;
     }
@@ -56,13 +56,13 @@ class TransactionsListResponse
 {
     /**
      *
-     * @var \SumUp\Types\TransactionHistory[]|null
+     * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionHistory[]|null
      */
     public ?array $items = null;
 
     /**
      *
-     * @var \SumUp\Types\TransactionsHistoryLink[]|null
+     * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionsHistoryLink[]|null
      */
     public ?array $links = null;
 
@@ -264,13 +264,13 @@ class Transactions implements SumUpService
      * @param TransactionsGetParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Types\TransactionFull
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionFull
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function get(string $merchantCode, ?TransactionsGetParams $queryParams = null, ?RequestOptions $requestOptions = null): \SumUp\Types\TransactionFull
+    public function get(string $merchantCode, ?TransactionsGetParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionFull
     {
         $path = sprintf('/v2.1/merchants/%s/transactions', rawurlencode((string) $merchantCode));
         if ($queryParams !== null) {
@@ -299,9 +299,9 @@ class Transactions implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Types\TransactionFull::class, [
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionFull::class, [
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'GET', $path);
     }
 
@@ -312,13 +312,13 @@ class Transactions implements SumUpService
      * @param TransactionsListParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return \SumUp\Services\TransactionsListResponse
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\TransactionsListResponse
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function list(string $merchantCode, ?TransactionsListParams $queryParams = null, ?RequestOptions $requestOptions = null): \SumUp\Services\TransactionsListResponse
+    public function list(string $merchantCode, ?TransactionsListParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\TransactionsListResponse
     {
         $path = sprintf('/v2.1/merchants/%s/transactions/history', rawurlencode((string) $merchantCode));
         if ($queryParams !== null) {
@@ -374,9 +374,9 @@ class Transactions implements SumUpService
 
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
 
-        return ResponseDecoder::decodeOrThrow($response, \SumUp\Services\TransactionsListResponse::class, [
-            '400' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
-            '401' => ['type' => 'class', 'class' => \SumUp\Types\Problem::class],
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\TransactionsListResponse::class, [
+            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
+            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
         ], 'GET', $path);
     }
 
@@ -389,10 +389,10 @@ class Transactions implements SumUpService
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return null
-     * @throws \SumUp\Exception\ApiException
-     * @throws \SumUp\Exception\UnexpectedApiException
-     * @throws \SumUp\Exception\ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function refund(string $merchantCode, string $id, TransactionsRefundRequest|array|null $body = null, ?RequestOptions $requestOptions = null): null
     {
@@ -412,8 +412,8 @@ class Transactions implements SumUpService
         return ResponseDecoder::decodeOrThrow($response, [
             '204' => ['type' => 'void'],
         ], [
-            '404' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
-            '409' => ['type' => 'class', 'class' => \SumUp\Types\Error::class],
+            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
+            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
         ], 'POST', $path);
     }
 }

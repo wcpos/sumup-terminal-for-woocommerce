@@ -1,6 +1,6 @@
 <?php
 
-namespace SumUp\HttpClient;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient;
 
 /**
  * Class Response

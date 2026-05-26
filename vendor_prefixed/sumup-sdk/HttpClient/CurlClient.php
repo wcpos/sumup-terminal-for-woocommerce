@@ -1,10 +1,10 @@
 <?php
 
-namespace SumUp\HttpClient;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient;
 
-use SumUp\Exception\ConfigurationException;
-use SumUp\Exception\ConnectionException;
-use SumUp\Exception\SDKException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConfigurationException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException;
 
 /**
  * Class CurlClient

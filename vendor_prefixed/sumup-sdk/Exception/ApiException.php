@@ -1,6 +1,6 @@
 <?php
 
-namespace SumUp\Exception;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception;
 
 /**
  * Represents an API error decoded from a non-2xx response.

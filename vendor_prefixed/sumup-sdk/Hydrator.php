@@ -1,6 +1,6 @@
 <?php
 
-namespace SumUp;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 
 use ReflectionClass;
 use ReflectionNamedType;

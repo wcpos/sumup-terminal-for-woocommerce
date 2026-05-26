@@ -1,9 +1,9 @@
 <?php
 
-namespace SumUp\HttpClient;
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient;
 
-use SumUp\Exception\ConfigurationException;
-use SumUp\Exception\ConnectionException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConfigurationException;
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException;
 
 /**
  * Guzzle-based HTTP client (optional dependency).
@@ -53,7 +53,7 @@ class GuzzleClient implements HttpClientInterface
      * @return Response
      *
      * @throws ConnectionException
-     * @throws \SumUp\Exception\SDKException
+     * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
     public function send(string $method, string $url, array $body, array $headers, ?RequestOptions $options = null): Response
     {
@@ -174,7 +174,7 @@ class GuzzleClient implements HttpClientInterface
     {
         if (!class_exists('\\GuzzleHttp\\Client')) {
             throw new ConfigurationException(
-                'Guzzle is not installed. Run `composer require guzzlehttp/guzzle` to use SumUp\\HttpClient\\GuzzleClient.'
+                'Guzzle is not installed. Run `composer require guzzlehttp/guzzle` to use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\\HttpClient\\GuzzleClient.'
             );
         }
     }
