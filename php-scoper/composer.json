@@ -1,0 +1,15 @@
+{
+  "name": "wcpos/sumup-terminal-for-woocommerce-scoper",
+  "private": true,
+  "type": "project",
+  "require": {
+    "humbug/php-scoper": "^0.18",
+    "sumup/sumup-php": "0.1.4"
+  },
+  "config": {
+    "platform": {
+      "php": "8.2.0"
+    },
+    "allow-plugins": {}
+  }
+}
