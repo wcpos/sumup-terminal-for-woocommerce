@@ -1,9 +1,13 @@
 <?php
 /**
  * Official SumUp SDK availability checks.
+ *
+ * @package SumUpTerminalForWooCommerce
  */
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Services;
+
+// phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 
 class SdkAvailability {
 	public const MINIMUM_PHP_VERSION_ID = 80200;

@@ -36,9 +36,9 @@ if ( file_exists( SUTWC_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
 
 // Include the prefixed official SumUp SDK only on PHP versions that can parse it.
 // This runtime guard must happen before requiring the SDK autoloader.
-$prefixed_sumup_autoload = SUTWC_PLUGIN_DIR . 'vendor_prefixed/sumup-sdk-autoload.php';
-if ( PHP_VERSION_ID >= 80200 && file_exists( $prefixed_sumup_autoload ) ) {
-	require_once $prefixed_sumup_autoload;
+$sutwc_prefixed_sumup_autoload = SUTWC_PLUGIN_DIR . 'vendor_prefixed/sumup-sdk-autoload.php';
+if ( PHP_VERSION_ID >= 80200 && file_exists( $sutwc_prefixed_sumup_autoload ) ) {
+	require_once $sutwc_prefixed_sumup_autoload;
 }
 
 // Autoload classes using PSR-4.

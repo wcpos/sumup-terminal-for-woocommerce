@@ -1,9 +1,13 @@
 <?php
 /**
  * Official SumUp SDK implementation of supported Reader API operations.
+ *
+ * @package SumUpTerminalForWooCommerce
  */
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Services;
+
+// phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 
 use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
 

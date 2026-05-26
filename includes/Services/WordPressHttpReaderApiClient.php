@@ -1,6 +1,8 @@
 <?php
 /**
  * WordPress HTTP implementation of the SumUp Reader API.
+ *
+ * @package SumUpTerminalForWooCommerce
  */
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Services;

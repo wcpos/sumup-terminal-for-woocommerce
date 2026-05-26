@@ -1,9 +1,13 @@
 <?php
 /**
  * Reader API client contract.
+ *
+ * @package SumUpTerminalForWooCommerce
  */
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Services;
+
+// phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 
 interface ReaderApiClientInterface {
 	public function get_all();
