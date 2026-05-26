@@ -20,6 +20,11 @@ spl_autoload_register(
         $relative = substr($class, strlen($prefix));
         $file = $baseDir . str_replace('\\', '/', $relative) . '.php';
 
+        if (!is_file($file) && strpos($relative, 'Services\\') === 0) {
+            $service = substr($relative, strlen('Services\\'));
+            $file = $baseDir . $service . '/' . $service . '.php';
+        }
+
         if (is_file($file)) {
             require $file;
         }
