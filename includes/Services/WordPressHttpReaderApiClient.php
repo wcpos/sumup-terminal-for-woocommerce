@@ -136,7 +136,11 @@ class WordPressHttpReaderApiClient extends HttpClient implements ReaderApiClient
 		// SumUp API returns HTTP 204 (no content) for terminate requests
 		// We consider it successful if the request was sent (no network error)
 		// The actual termination result will come via webhook to return_url
-		return ! is_wp_error( $response );
+		if ( false === $response || is_wp_error( $response ) ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**

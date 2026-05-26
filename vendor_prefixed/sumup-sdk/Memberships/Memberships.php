@@ -92,12 +92,26 @@ class MembershipsListParams
     public ?string $resourceParentId = null;
 
     /**
+     * Include resource.parent.id even when it is null.
+     *
+     * @var bool
+     */
+    public bool $resourceParentIdPresent = false;
+
+    /**
      * Filter memberships by the parent of the resource the membership is in.
      * When filtering by parent both `resource.parent.id` and `resource.parent.type` must be present. Pass explicit null to filter for resources without a parent.
      *
      * @var mixed|null
      */
     public mixed $resourceParentType = null;
+
+    /**
+     * Include resource.parent.type even when it is null.
+     *
+     * @var bool
+     */
+    public bool $resourceParentTypePresent = false;
 
     /**
      * Filter the returned memberships by role.
@@ -181,11 +195,11 @@ class Memberships implements SumUpService
             if (isset($queryParams->resourceName)) {
                 $queryParamsData['resource.name'] = $queryParams->resourceName;
             }
-            if (isset($queryParams->resourceParentId)) {
-                $queryParamsData['resource.parent.id'] = $queryParams->resourceParentId;
+            if (isset($queryParams->resourceParentId) || $queryParams->resourceParentIdPresent) {
+                $queryParamsData['resource.parent.id'] = $queryParams->resourceParentId ?? '';
             }
-            if (isset($queryParams->resourceParentType)) {
-                $queryParamsData['resource.parent.type'] = $queryParams->resourceParentType;
+            if (isset($queryParams->resourceParentType) || $queryParams->resourceParentTypePresent) {
+                $queryParamsData['resource.parent.type'] = $queryParams->resourceParentType ?? '';
             }
             if (isset($queryParams->roles)) {
                 $queryParamsData['roles'] = $queryParams->roles;

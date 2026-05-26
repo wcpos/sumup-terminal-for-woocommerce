@@ -101,6 +101,10 @@ class ReadersTerminateCheckoutRequest
      */
     public static function fromArray(array $data): self
     {
+        if ($data !== []) {
+            throw new \InvalidArgumentException('ReadersTerminateCheckoutRequest does not accept payload fields.');
+        }
+
         return new self();
     }
 }

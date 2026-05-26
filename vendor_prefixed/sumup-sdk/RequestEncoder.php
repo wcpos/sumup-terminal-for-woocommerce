@@ -19,7 +19,7 @@ class RequestEncoder
         }
 
         if (is_array($value)) {
-            return $value;
+            return self::normalize($value);
         }
 
         $normalized = self::normalize($value);

@@ -81,6 +81,9 @@ class CurlClient implements HttpClientInterface
         $attempt = 0;
         do {
             $ch = curl_init();
+            if ($ch === false) {
+                throw new ConnectionException('Failed to initialize cURL handle.', 0);
+            }
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
             curl_setopt($ch, CURLOPT_URL, $requestUrl);
             curl_setopt($ch, CURLOPT_HTTPHEADER, $this->formatHeaders($reqHeaders));

@@ -73,4 +73,9 @@ spl_autoload_register(
 );
 PHP;
 
-file_put_contents($root . '/vendor_prefixed/sumup-sdk-autoload.php', $autoload);
+$autoloadPath = $root . '/vendor_prefixed/sumup-sdk-autoload.php';
+$written = file_put_contents($autoloadPath, $autoload);
+if ($written === false || $written !== strlen($autoload)) {
+    fwrite(STDERR, "Failed to write prefixed SDK autoload file: {$autoloadPath}\n");
+    exit(1);
+}

@@ -20,8 +20,35 @@ foreach ($iterator as $file) {
 
     $path = $file->getPathname();
     $contents = file_get_contents($path);
-    $contents = preg_replace('/namespace\\s+SumUp\\b/', 'namespace ' . $prefix, $contents);
-    $contents = preg_replace('/use\\s+SumUp\\\\/', 'use ' . str_replace('\\', '\\\\', $prefix) . '\\\\', $contents);
-    $contents = preg_replace('/(?<!SumUpSdk)\\\\SumUp\\\\/', '\\\\' . str_replace('\\', '\\\\', $prefix) . '\\\\', $contents);
-    file_put_contents($path, $contents);
+    if ($contents === false) {
+        fwrite(STDERR, "Failed to read file: {$path}\n");
+        exit(1);
+    }
+
+    $replaced = preg_replace('/namespace\\s+SumUp\\b/', 'namespace ' . $prefix, $contents);
+    if ($replaced === null || preg_last_error() !== PREG_NO_ERROR) {
+        fwrite(STDERR, "Regex namespace replacement failed for file: {$path}\n");
+        exit(1);
+    }
+    $contents = $replaced;
+
+    $replaced = preg_replace('/use\\s+SumUp\\\\/', 'use ' . str_replace('\\', '\\\\', $prefix) . '\\\\', $contents);
+    if ($replaced === null || preg_last_error() !== PREG_NO_ERROR) {
+        fwrite(STDERR, "Regex use replacement failed for file: {$path}\n");
+        exit(1);
+    }
+    $contents = $replaced;
+
+    $replaced = preg_replace('/(?<!SumUpSdk)\\\\SumUp\\\\/', '\\\\' . str_replace('\\', '\\\\', $prefix) . '\\\\', $contents);
+    if ($replaced === null || preg_last_error() !== PREG_NO_ERROR) {
+        fwrite(STDERR, "Regex fully-qualified replacement failed for file: {$path}\n");
+        exit(1);
+    }
+    $contents = $replaced;
+
+    $written = file_put_contents($path, $contents);
+    if ($written === false || $written !== strlen($contents)) {
+        fwrite(STDERR, "Failed to write file: {$path}\n");
+        exit(1);
+    }
 }
