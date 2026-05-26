@@ -10,6 +10,7 @@ use WC_Payment_Gateway;
 
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\SdkAvailability;
 
 /**
  * Class SumUpTerminalGateway.
@@ -149,6 +150,8 @@ class Gateway extends WC_Payment_Gateway {
 	 */
 	public function admin_options(): void {
 		parent::admin_options();
+
+		echo wp_kses_post( $this->get_sdk_status_html() );
 
 		// Add Connection Status section outside of form fields
 		?>
