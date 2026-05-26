@@ -24,7 +24,7 @@ class ReaderService {
 	 * @param null|ReaderApiClientInterface $client  Reader API client.
 	 */
 	public function __construct( $api_key = '', ?ReaderApiClientInterface $client = null ) {
-		$this->client = $client ?: new WordPressHttpReaderApiClient( $api_key );
+		$this->client = $client ? $client : ReaderApiClientFactory::create( $api_key );
 	}
 
 	/**
