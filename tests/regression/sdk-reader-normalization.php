@@ -49,3 +49,36 @@ if ($result !== $expected) {
 }
 
 echo "PASS: SDK reader normalization matches existing array shape.\n";
+
+$checkoutMethod = $reflection->getMethod('normalize_checkout_response');
+if (PHP_VERSION_ID < 80100) {
+    $checkoutMethod->setAccessible(true);
+}
+
+$checkout = (object) array(
+    'data' => (object) array(
+        'clientTransactionId' => 'txn-123',
+        'totalAmount' => (object) array(
+            'minorUnit' => 2,
+        ),
+    ),
+);
+
+$checkoutResult = $checkoutMethod->invoke($client, $checkout);
+
+$expectedCheckout = array(
+    'data' => array(
+        'client_transaction_id' => 'txn-123',
+        'total_amount' => array(
+            'minor_unit' => 2,
+        ),
+    ),
+);
+
+if ($checkoutResult !== $expectedCheckout) {
+    fwrite(STDERR, "SDK checkout normalization did not convert response keys to snake_case.\n");
+    fwrite(STDERR, var_export($checkoutResult, true) . "\n");
+    exit(1);
+}
+
+echo "PASS: SDK checkout normalization matches existing array shape.\n";

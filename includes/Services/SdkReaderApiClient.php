@@ -231,7 +231,7 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 	}
 
 	private function normalize_checkout_response( $response ) {
-		return json_decode( wp_json_encode( $response ), true );
+		return $this->snake_case_array_keys( json_decode( wp_json_encode( $response ), true ) );
 	}
 
 	private function enum_value( $value ) {
@@ -244,6 +244,24 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		}
 
 		return $value;
+	}
+
+	private function snake_case_array_keys( $value ) {
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+
+		$normalized = array();
+
+		foreach ( $value as $key => $item ) {
+			if ( is_string( $key ) ) {
+				$key = strtolower( preg_replace( '/(?<!^)[A-Z]/', '_$0', $key ) );
+			}
+
+			$normalized[ $key ] = $this->snake_case_array_keys( $item );
+		}
+
+		return $normalized;
 	}
 
 	private function sdk_call( $operation, callable $callback, callable $fallback ) {
