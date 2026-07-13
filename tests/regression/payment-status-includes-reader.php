@@ -70,4 +70,40 @@ if (!preg_match('/\'reader_status\'\s*=>\s*\$reader_status/', $method)) {
 	exit(1);
 }
 
+class WC_Logger {
+	public function log($level, $message, $context) {}
+}
+
+function apply_filters($hook, $value) {
+	return $value;
+}
+
+function wc_get_logger() {
+	return new WC_Logger();
+}
+
+require_once __DIR__ . '/../../includes/Logger.php';
+require_once __DIR__ . '/../../includes/AjaxHandler.php';
+
+$ajax_ref = new ReflectionClass(WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::class);
+$ajax = $ajax_ref->newInstanceWithoutConstructor();
+$matcher = $ajax_ref->getMethod('webhook_matches_current_attempt');
+if (PHP_VERSION_ID < 80100) {
+	$matcher->setAccessible(true);
+}
+$order = new class {
+	public function get_meta($key) {
+		return $key === '_sumup_checkout_status' ? 'PENDING' : '';
+	}
+
+	public function get_transaction_id() {
+		return 'solo-transaction-123';
+	}
+};
+
+if (!$matcher->invoke($ajax, $order, array('transaction_id' => 'solo-transaction-123'))) {
+	fwrite(STDERR, "Solo transaction webhooks must correlate using transaction_id.\n");
+	exit(1);
+}
+
 echo "PASS: payment status includes live SumUp reader state.\n";

@@ -603,7 +603,7 @@ class AjaxHandler {
 			return false;
 		}
 		$current_transaction = (string) $order->get_transaction_id();
-		$event_transaction   = (string) ( $payload['client_transaction_id'] ?? $payload['reference'] ?? '' );
+		$event_transaction   = (string) ( $payload['client_transaction_id'] ?? $payload['reference'] ?? $payload['transaction_id'] ?? '' );
 		if ( empty( $current_transaction ) ) {
 			return true;
 		}
