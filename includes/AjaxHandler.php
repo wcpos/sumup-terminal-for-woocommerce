@@ -10,6 +10,7 @@ use Exception;
 
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\TransactionService;
 
 /**
  * Class AjaxHandler.
@@ -173,6 +174,7 @@ class AjaxHandler {
 			$order->delete_meta_data( '_sumup_checkout_updated' );
 			$order->delete_meta_data( '_sumup_transaction_status' );
 			$order->delete_meta_data( '_sumup_transaction_updated' );
+			$order->delete_meta_data( '_sumup_transaction_checked_at' );
 			$order->set_transaction_id( '' );
 			$order->update_meta_data( '_sumup_checkout_status', 'CREATING' );
 			$order->update_meta_data( '_sumup_reader_id', $reader_id );
@@ -296,10 +298,45 @@ class AjaxHandler {
 			wp_send_json_error( __( 'Invalid order key', 'sumup-terminal-for-woocommerce' ) );
 		}
 
-		// Get the checkout status from order meta
-		$checkout_status  = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
-		$checkout_updated = $order->get_meta( '_sumup_checkout_updated' );
+		// Reconcile pending webhook state against SumUp's authoritative transaction record.
+		$checkout_status    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
 		$transaction_status = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
+		$transaction_id     = (string) $order->get_transaction_id();
+		$services           = null;
+		$final_statuses      = array( 'PAID', 'FAILED', 'CANCELLED', 'TIMEOUT', 'EXPIRED' );
+		$final_transaction_statuses = array( 'SUCCESSFUL', 'FAILED', 'CANCELLED' );
+		$last_transaction_check = (int) $order->get_meta( '_sumup_transaction_checked_at' );
+		$transaction_check_due = ( time() - $last_transaction_check ) >= 5;
+		if (
+			! empty( $transaction_id )
+			&& 'PAID' !== $checkout_status
+			&& ! in_array( $transaction_status, $final_transaction_statuses, true )
+			&& ( $transaction_check_due || in_array( $checkout_status, $final_statuses, true ) )
+		) {
+			try {
+				$order->update_meta_data( '_sumup_transaction_checked_at', time() );
+				$order->save();
+				$services        = $this->get_services();
+				$transaction     = $services['transaction']->get_by_client_transaction_id( $transaction_id );
+				$response_id     = is_array( $transaction ) ? (string) ( $transaction['client_transaction_id'] ?? '' ) : '';
+				$response_status = is_array( $transaction ) ? strtoupper( (string) ( $transaction['status'] ?? '' ) ) : '';
+
+				if (
+					! empty( $response_id )
+					&& hash_equals( $transaction_id, $response_id )
+					&& in_array( $response_status, $final_transaction_statuses, true )
+				) {
+					$transaction_status = $response_status;
+					$order->update_meta_data( '_sumup_transaction_status', $transaction_status );
+					$order->update_meta_data( '_sumup_transaction_updated', gmdate( 'c' ) );
+					$order->delete_meta_data( '_sumup_reader_id' );
+					$order->save();
+				}
+			} catch ( Exception $e ) {
+				Logger::log( 'Transaction status request failed: ' . $e->getMessage() );
+			}
+		}
+
 		if ( 'SUCCESSFUL' === $transaction_status ) {
 			$checkout_status = 'PAID';
 		} elseif ( 'PAID' !== $checkout_status && in_array( $transaction_status, array( 'FAILED', 'CANCELLED' ), true ) ) {
@@ -307,12 +344,11 @@ class AjaxHandler {
 		}
 
 		$reader_status = array();
-		$final_statuses = array( 'PAID', 'FAILED', 'CANCELLED', 'TIMEOUT', 'EXPIRED' );
 		$reader_id      = sanitize_text_field( (string) $order->get_meta( '_sumup_reader_id' ) );
 		$has_active_attempt = ! empty( $checkout_status ) || ! empty( $transaction_status );
 		if ( $has_active_attempt && ! in_array( $checkout_status, $final_statuses, true ) && ! empty( $reader_id ) ) {
 			try {
-				$services        = $this->get_services();
+				$services        = $services ? $services : $this->get_services();
 				$status_response = $services['reader']->get_status( $reader_id );
 
 				if ( is_array( $status_response ) ) {
@@ -651,18 +687,21 @@ class AjaxHandler {
 	private function get_services() {
 		$api_key = $this->get_api_key();
 
-		$profile_service = new ProfileService( $api_key );
-		$reader_service  = new ReaderService( $api_key );
+		$profile_service     = new ProfileService( $api_key );
+		$reader_service      = new ReaderService( $api_key );
+		$transaction_service = new TransactionService( $api_key );
 
-		// Set the profile service on the reader service for lazy merchant ID loading
+		// Set the profile service for lazy merchant ID loading.
 		$reader_service->set_profile_service( $profile_service );
+		$transaction_service->set_profile_service( $profile_service );
 
 		// Note: We no longer fetch merchant_code here to avoid unnecessary API calls.
 		// The merchant_code will be fetched lazily when needed and cached.
 
 		return array(
-			'profile' => $profile_service,
-			'reader'  => $reader_service,
+			'profile'     => $profile_service,
+			'reader'      => $reader_service,
+			'transaction' => $transaction_service,
 		);
 	}
 }
