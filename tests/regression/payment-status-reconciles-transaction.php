@@ -29,6 +29,8 @@ if (
 	|| strpos($method, 'hash_equals( $transaction_id, $response_id )') === false
 	|| strpos($method, 'in_array( $response_status, $final_transaction_statuses, true )') === false
 	|| strpos($method, "get_meta( '_sumup_transaction_checked_at' )") === false
+	|| !preg_match('/\$force_transaction_check\s*=.*?\$_POST\[\'force_transaction_check\'\]/s', $method)
+	|| !preg_match('/\$transaction_check_due\s*\|\|\s*\$force_transaction_check/s', $method)
 ) {
 	fwrite(STDERR, "Pending payments are not reconciled against the SumUp Transactions API.\n");
 	exit(1);

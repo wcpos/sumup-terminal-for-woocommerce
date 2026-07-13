@@ -280,8 +280,11 @@ class AjaxHandler {
 		}
 
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Payment AJAX intentionally supports the POS environment.
-		$order_id  = absint( $_POST['order_id'] ?? 0 );
-		$order_key = sanitize_text_field( wp_unslash( $_POST['order_key'] ?? '' ) );
+		$order_id                = absint( $_POST['order_id'] ?? 0 );
+		$order_key               = sanitize_text_field( wp_unslash( $_POST['order_key'] ?? '' ) );
+		$force_transaction_check = wc_string_to_bool(
+			sanitize_text_field( wp_unslash( $_POST['force_transaction_check'] ?? '' ) )
+		);
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 		if ( empty( $order_id ) ) {
@@ -311,7 +314,11 @@ class AjaxHandler {
 			! empty( $transaction_id )
 			&& 'PAID' !== $checkout_status
 			&& ! in_array( $transaction_status, $final_transaction_statuses, true )
-			&& ( $transaction_check_due || in_array( $checkout_status, $final_statuses, true ) )
+			&& (
+				$transaction_check_due
+				|| $force_transaction_check
+				|| in_array( $checkout_status, $final_statuses, true )
+			)
 		) {
 			try {
 				$order->update_meta_data( '_sumup_transaction_checked_at', time() );
