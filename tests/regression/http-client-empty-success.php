@@ -6,9 +6,11 @@ function wp_json_encode($data) {
 }
 
 function wp_remote_request($url, $args) {
+	global $response_body;
+
 	return array(
 		'response' => array('code' => 204),
-		'body' => '',
+		'body' => $response_body,
 	);
 }
 
@@ -33,12 +35,14 @@ class EmptySuccessHttpClient extends WCPOS\WooCommercePOS\SumUpTerminal\Services
 }
 
 $client = new EmptySuccessHttpClient('api-key');
-$result = $client->post_empty_success();
+foreach (array('', " \n\t") as $response_body) {
+	$result = $client->post_empty_success();
 
-if ($result !== array('success' => true)) {
-	fwrite(STDERR, "Empty successful responses must remain distinguishable from request failures.\n");
-	fwrite(STDERR, var_export($result, true) . "\n");
-	exit(1);
+	if ($result !== array('success' => true)) {
+		fwrite(STDERR, "Empty successful responses must remain distinguishable from request failures.\n");
+		fwrite(STDERR, var_export($result, true) . "\n");
+		exit(1);
+	}
 }
 
 echo "PASS: empty successful API responses are treated as success.\n";
