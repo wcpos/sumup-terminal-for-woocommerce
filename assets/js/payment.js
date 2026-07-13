@@ -327,7 +327,8 @@
                     data: {
                         action: 'sumup_check_payment_status',
                         order_id: pollData.orderId,
-                        order_key: pollData.orderKey
+                        order_key: pollData.orderKey,
+                        force_transaction_check: Boolean(pollData.timeoutFinalCheckRunning)
                     },
                     success: (response) => {
                         if (pollData.active === false) return;
