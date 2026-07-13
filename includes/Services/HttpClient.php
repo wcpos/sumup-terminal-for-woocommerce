@@ -232,6 +232,10 @@ class HttpClient {
 			return false;
 		}
 
+		if ( '' === trim( $body ) ) {
+			return array( 'success' => true );
+		}
+
 		$decoded = json_decode( $body, true );
 
 		return null !== $decoded ? $decoded : false;

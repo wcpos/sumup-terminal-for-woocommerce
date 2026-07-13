@@ -143,4 +143,83 @@
         margin: 5px 0;
         min-width: auto;
     }
-} 
+}
+
+/* Scoped controls override storefront themes without inline styles. */
+#sumup-terminal-payment-interface .reader-controls,
+#sumup-terminal-payment-interface .sumup-logging-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+#sumup-terminal-payment-interface .reader-controls .button,
+#sumup-terminal-payment-interface .sumup-logging-actions .button {
+    min-height: 40px;
+    margin: 0;
+    padding: 8px 14px;
+    border: 1px solid #8c8f94;
+    border-radius: 5px;
+    background: #fff;
+    color: #1d2327;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+}
+#sumup-terminal-payment-interface .reader-controls .button-primary {
+    border-color: #2271b1;
+    background: #2271b1;
+    color: #fff;
+}
+#sumup-terminal-payment-interface .reader-controls .button-primary:hover {
+    border-color: #135e96;
+    background: #135e96;
+}
+#sumup-terminal-payment-interface .sumup-cancel-btn {
+    border-color: #d63638;
+    color: #b32d2e;
+}
+#sumup-terminal-payment-interface .button:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+    box-shadow: none;
+}
+#sumup-terminal-payment-interface .sumup-logging-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #dcdcde;
+}
+#sumup-terminal-payment-interface .sumup-logging-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+#sumup-terminal-payment-interface .sumup-logging-actions .button {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+#sumup-terminal-payment-interface .sumup-log-content {
+    margin-top: 12px;
+}
+#sumup-terminal-payment-interface .sumup-payment-log-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 150px;
+    padding: 12px;
+    resize: vertical;
+    border: 1px solid #8c8f94;
+    border-radius: 5px;
+    background: #f6f7f7;
+    color: #2c3338;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+@media (max-width: 600px) {
+    #sumup-terminal-payment-interface .sumup-logging-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    #sumup-terminal-payment-interface .reader-controls .button {
+        width: 100%;
+    }
+}
