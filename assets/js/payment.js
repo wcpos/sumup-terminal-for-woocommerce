@@ -8,6 +8,7 @@
 
     // Initialize the payment interface
     const sumupPayment = {
+        activePolls: {},
         
         /**
          * Initialize payment handlers
@@ -15,6 +16,8 @@
         init: function() {
             this.bindEvents();
             this.setAjaxUrl();
+            this.restoreLogs();
+            $(document.body).on('updated_checkout', this.restoreLogs.bind(this));
         },
 
         /**
@@ -32,20 +35,62 @@
         bindEvents: function() {
             // Use event delegation for dynamic content
             $(document).on('click', '.sumup-checkout-btn', this.startPayment.bind(this));
+            $(document).on('click', '.sumup-check-status-btn', this.checkPaymentStatus.bind(this));
             $(document).on('click', '.sumup-cancel-btn', this.cancelPayment.bind(this));
+            $(document).on('click', '.sumup-toggle-log', this.toggleLogs.bind(this));
+            $(document).on('click', '.sumup-copy-log', this.copyLogs.bind(this));
+            $(document).on('click', '.sumup-clear-log', this.clearLogs.bind(this));
         },
 
+        appendLog: function(level, message) {
+            const textarea = $('.sumup-payment-log-textarea');
+            if (!textarea.length) return;
+            const line = '[' + new Date().toLocaleTimeString() + '] [' + level.toUpperCase() + '] ' + String(message);
+            const lines = (textarea.val() ? textarea.val().split('\n') : []).concat(line).slice(-50);
+            textarea.val(lines.join('\n')).scrollTop(textarea[0].scrollHeight);
+            try { sessionStorage.setItem('sumup-payment-log-' + ($('#sumup-terminal-payment-interface').data('order-id') || 'unknown'), textarea.val()); } catch (error) {}
+        },
+        restoreLogs: function() {
+            const textarea = $('.sumup-payment-log-textarea');
+            if (!textarea.length) return;
+            try { textarea.val(sessionStorage.getItem('sumup-payment-log-' + ($('#sumup-terminal-payment-interface').data('order-id') || 'unknown')) || ''); } catch (error) {}
+            this.appendLog('info', sumupPaymentData.strings.panelReady);
+        },
+        toggleLogs: function(event) {
+            const button = $(event.currentTarget);
+            const expanded = button.attr('aria-expanded') === 'true';
+            button.attr('aria-expanded', expanded ? 'false' : 'true').text(expanded ? sumupPaymentData.strings.logsHidden : sumupPaymentData.strings.logsShown);
+            $('.sumup-log-content').prop('hidden', expanded);
+        },
+        copyLogs: function() {
+            const textarea = $('.sumup-payment-log-textarea');
+            if (!textarea.length) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textarea.val()).then(() => this.appendLog('success', sumupPaymentData.strings.logsCopied)).catch(() => this.appendLog('warning', sumupPaymentData.strings.logsCopyFailed));
+            } else {
+                textarea.trigger('focus').trigger('select');
+                this.appendLog('warning', sumupPaymentData.strings.logsCopyFailed);
+            }
+        },
+
+        clearLogs: function() {
+            $('.sumup-payment-log-textarea').val('');
+            try { sessionStorage.removeItem('sumup-payment-log-' + ($('#sumup-terminal-payment-interface').data('order-id') || 'unknown')); } catch (error) {}
+            this.appendLog('info', sumupPaymentData.strings.logCleared);
+        },
         /**
          * Start payment on selected reader
          */
         startPayment: function(event) {
             event.preventDefault();
             
-            const button = $(event.target);
+            const button = $(event.currentTarget);
             const readerId = button.data('reader-id');
             const orderId = button.data('order-id');
+            const orderKey = $('#sumup-terminal-payment-interface').attr('data-order-key') || '';
             const statusDiv = $('#payment-status-' + readerId);
             const cancelBtn = button.siblings('.sumup-cancel-btn');
+            const statusBtn = button.siblings('.sumup-check-status-btn');
 
             if (!readerId || !orderId) {
                 this.showError(statusDiv, 'Missing reader ID or order ID');
@@ -53,8 +98,11 @@
             }
 
             // Update UI
-            button.prop('disabled', true).text(sumupPaymentData.strings.startingPayment);
-            statusDiv.html('<div class="sumup-status-message">' + sumupPaymentData.strings.startingPayment + '</div>');
+            $('.sumup-checkout-btn').prop('disabled', true);
+            $('.sumup-check-status-btn').prop('disabled', true);
+            button.text(sumupPaymentData.strings.startingPayment);
+            this.setStatus(statusDiv, sumupPaymentData.strings.startingPayment, 'message');
+            this.appendLog('info', sumupPaymentData.strings.startingPayment);
 
             // Make AJAX request
             $.ajax({
@@ -64,38 +112,89 @@
                     action: 'sumup_create_checkout',
                     nonce: sumupPaymentData.nonce,
                     reader_id: readerId,
-                    order_id: orderId
+                    order_id: orderId,
+                    order_key: orderKey
                 },
                 success: (response) => {
                     if (response.success) {
                         // Payment started successfully
-                        button.text('Payment Started').prop('disabled', true);
-                        cancelBtn.show();
-                        statusDiv.html('<div class="sumup-status-success">' + response.data.message + '</div>');
+                        button.text(sumupPaymentData.strings.paymentStarted).prop('disabled', true);
+                        statusBtn.prop('disabled', false);
+                        cancelBtn.prop('hidden', false);
+                        this.setStatus(statusDiv, response.data.message, 'success');
+                        this.appendLog('success', response.data.message);
                         
                         // You might want to poll for payment status here
-                        this.pollPaymentStatus(readerId, orderId, statusDiv, button, cancelBtn);
+                        this.pollPaymentStatus(readerId, orderId, orderKey, statusDiv, button, cancelBtn);
                     } else {
                         this.handlePaymentError(response.data, statusDiv, button, cancelBtn);
                     }
                 },
                 error: (xhr) => {
+                    statusBtn.prop('disabled', false);
                     this.handleAjaxError(xhr, statusDiv, button, cancelBtn);
                 }
             });
         },
 
+        checkPaymentStatus: function(event) {
+            event.preventDefault();
+            const button = $(event.currentTarget);
+            const readerId = button.data('reader-id');
+            const orderId = button.data('order-id');
+            const activePoll = this.activePolls[readerId];
+            if (activePoll && activePoll.requestPending) {
+                this.appendLog('info', sumupPaymentData.strings.statusAlreadyChecking);
+                return;
+            }
+            const pollData = activePoll || {
+                readerId: readerId,
+                orderId: orderId,
+                orderKey: $('#sumup-terminal-payment-interface').attr('data-order-key') || '',
+                statusDiv: $('#payment-status-' + readerId),
+                startBtn: button.siblings('.sumup-checkout-btn'),
+                cancelBtn: button.siblings('.sumup-cancel-btn'),
+                active: true,
+                manualOnly: true
+            };
+            if (!readerId || !orderId) {
+                this.showError(pollData.statusDiv, 'Missing reader ID or order ID');
+                return;
+            }
+            if (!activePoll) this.activePolls[readerId] = pollData;
+            pollData.manualCheck = true;
+            button.prop('disabled', true);
+            this.setStatus(pollData.statusDiv, sumupPaymentData.strings.checkingStatus, 'message');
+            this.requestPaymentStatus(pollData).always(() => {
+                button.prop('disabled', false);
+                pollData.manualCheck = false;
+                if (pollData.manualOnly && pollData.active && this.activePolls[readerId] === pollData) {
+                    delete this.activePolls[readerId];
+                }
+            });
+        },
         /**
          * Cancel payment on selected reader
          */
         cancelPayment: function(event) {
             event.preventDefault();
             
-            const button = $(event.target);
+            const button = $(event.currentTarget);
             const readerId = button.data('reader-id');
             const orderId = button.data('order-id');
             const statusDiv = $('#payment-status-' + readerId);
             const startBtn = button.siblings('.sumup-checkout-btn');
+            const pollData = this.activePolls[readerId] || {
+                readerId: readerId,
+                orderId: orderId,
+                orderKey: $('#sumup-terminal-payment-interface').attr('data-order-key') || '',
+                statusDiv: statusDiv,
+                startBtn: startBtn,
+                cancelBtn: button,
+                pollCount: 0,
+                maxPolls: 150,
+                active: true
+            };
 
             if (!readerId) {
                 this.showError(statusDiv, 'Missing reader ID');
@@ -103,62 +202,92 @@
             }
 
             // Confirm cancellation
-            if (!confirm('Are you sure you want to cancel this payment?')) {
+            if (!confirm(sumupPaymentData.strings.cancelConfirm)) {
                 return;
             }
 
-            // Stop any active polling for this reader
-            this.stopAllPollingForReader(readerId);
+            this.activePolls[readerId] = pollData;
+            pollData.cancelRequested = true;
+            this.requestCancellation(pollData);
+        },
 
-            // Update UI
-            button.prop('disabled', true);
-            statusDiv.html('<div class="sumup-status-message">Cancelling payment...</div>');
-
-            // Make AJAX request
-            $.ajax({
+        requestCancellation: function(pollData) {
+            if (pollData.cancellationPending || pollData.active === false) return;
+            pollData.cancellationPending = true;
+            pollData.cancelBtn.prop('disabled', true);
+            this.setStatus(pollData.statusDiv, sumupPaymentData.strings.cancellingPayment, 'message');
+            this.appendLog('info', sumupPaymentData.strings.cancellingPayment);
+            return $.ajax({
                 url: window.ajaxurl,
                 type: 'POST',
                 data: {
                     action: 'sumup_cancel_checkout',
                     nonce: sumupPaymentData.nonce,
-                    reader_id: readerId,
-                    order_id: orderId
+                    reader_id: pollData.readerId,
+                    order_id: pollData.orderId,
+                    order_key: pollData.orderKey
                 },
                 success: (response) => {
+                    pollData.cancellationPending = false;
+                    if (pollData.active === false) return;
                     if (response.success) {
-                        // Payment cancelled successfully
-                        this.resetPaymentInterface(startBtn, button, statusDiv);
-                        statusDiv.html('<div class="sumup-status-cancelled">' + response.data.message + '</div>');
+                        pollData.cancelMessage = response.data.message;
+                        pollData.pollCount = 0;
+                        pollData.cancelBtn.prop('hidden', true).prop('disabled', false);
+                        pollData.startBtn.siblings('.sumup-check-status-btn').prop('disabled', false);
+                        this.setStatus(pollData.statusDiv, response.data.message, 'cancelled');
+                        this.appendLog('info', response.data.message);
+                        if (!pollData.intervalId) {
+                            pollData.pollCount = 0;
+                            this.startPolling(pollData);
+                        }
                     } else {
-                        this.showError(statusDiv, response.data);
-                        button.prop('disabled', false);
+                        pollData.cancelRequested = false;
+                        this.showError(pollData.statusDiv, response.data);
+                        pollData.cancelBtn.prop('disabled', false);
+                        this.resumePollingAfterCancellationFailure(pollData);
                     }
                 },
                 error: (xhr) => {
-                    this.handleAjaxError(xhr, statusDiv, button, null);
+                    pollData.cancellationPending = false;
+                    if (pollData.active === false) return;
+                    pollData.cancelRequested = false;
+                    pollData.cancelBtn.prop('disabled', false);
+                    this.showError(pollData.statusDiv, this.ajaxErrorMessage(xhr));
+                    this.resumePollingAfterCancellationFailure(pollData);
                 }
             });
         },
 
+        resumePollingAfterCancellationFailure: function(pollData) {
+            if (pollData.active && !pollData.intervalId) {
+                pollData.pollCount = 0;
+                this.startPolling(pollData);
+            }
+        },
         /**
          * Poll payment status by checking order meta data
          */
-        pollPaymentStatus: function(readerId, orderId, statusDiv, startBtn, cancelBtn) {
-            
+        pollPaymentStatus: function(readerId, orderId, orderKey, statusDiv, startBtn, cancelBtn) {
+            this.stopAllPollingForReader(readerId);
             // Store polling state
             const pollData = {
                 readerId: readerId,
                 orderId: orderId,
+                orderKey: orderKey,
                 statusDiv: statusDiv,
                 startBtn: startBtn,
                 cancelBtn: cancelBtn,
                 pollCount: 0,
-                maxPolls: 120, // 2 minutes at 1-second intervals
-                intervalId: null
+                maxPolls: 150, // 5 minutes at 2-second intervals
+                intervalId: null,
+                active: true
             };
             
             // Initial status message
-            statusDiv.append('<div class="sumup-status-info">Follow the instructions on your card reader to complete the payment.</div>');
+            this.setStatus(statusDiv, sumupPaymentData.strings.followReader, 'info');
+            this.appendLog('info', sumupPaymentData.strings.followReader);
+            this.activePolls[readerId] = pollData;
             
             // Start polling
             this.startPolling(pollData);
@@ -175,44 +304,92 @@
                 
                 // Check if we've exceeded max polling attempts
                 if (pollData.pollCount > pollData.maxPolls) {
-                    self.stopPolling(pollData);
-                    self.showError(pollData.statusDiv, 'Payment polling timed out. Please check the reader and try again.');
-                    self.resetPaymentInterface(pollData.startBtn, pollData.cancelBtn, pollData.statusDiv);
+                    clearInterval(pollData.intervalId);
+                    pollData.intervalId = null;
+                    pollData.timeoutPending = true;
+                    if (!pollData.requestPending) {
+                        pollData.timeoutFinalCheckRunning = true;
+                        self.requestPaymentStatus(pollData);
+                    }
                     return;
                 }
-                
-                // Make AJAX request to check payment status
-                $.ajax({
+
+                self.requestPaymentStatus(pollData);
+            }, 2000);
+        },
+
+        requestPaymentStatus: function(pollData) {
+            if (pollData.requestPending) return $.Deferred().resolve().promise();
+            pollData.requestPending = true;
+            const request = $.ajax({
                     url: window.ajaxurl,
                     type: 'POST',
                     data: {
                         action: 'sumup_check_payment_status',
-                        order_id: pollData.orderId
+                        order_id: pollData.orderId,
+                        order_key: pollData.orderKey
                     },
                     success: (response) => {
+                        if (pollData.active === false) return;
                         if (response.success) {
-                            self.handlePaymentStatusResponse(pollData, response.data);
+                            this.handlePaymentStatusResponse(pollData, response.data);
+                        } else {
+                            const message = response.data || sumupPaymentData.strings.networkError;
+                            this.appendLog('warning', message);
+                            if (pollData.manualOnly || pollData.manualCheck) this.showError(pollData.statusDiv, message);
                         }
                     },
-                    error: (xhr) => {
-                        // Don't stop polling on network errors, just continue
+                    error: () => {
+                        this.appendLog('warning', sumupPaymentData.strings.networkError);
+                        if (pollData.manualOnly || pollData.manualCheck) this.showError(pollData.statusDiv, sumupPaymentData.strings.networkError);
                     }
                 });
-            }, 1000); // Poll every second
+            request.always(() => {
+                pollData.requestPending = false;
+                if (pollData.timeoutPending && pollData.active) {
+                    if (pollData.timeoutFinalCheckRunning) {
+                        pollData.timeoutPending = false;
+                        pollData.timeoutFinalCheckRunning = false;
+                        this.handlePollingTimeout(pollData);
+                    } else {
+                        pollData.timeoutFinalCheckRunning = true;
+                        this.requestPaymentStatus(pollData);
+                    }
+                }
+            });
+            return request;
         },
 
+        handlePollingTimeout: function(pollData) {
+            if (pollData.cancelRequested) {
+                this.stopPolling(pollData);
+                this.setStatus(pollData.statusDiv, sumupPaymentData.strings.cancellationPendingTimeout, 'timeout');
+                this.appendLog('warning', sumupPaymentData.strings.cancellationPendingTimeout);
+                return;
+            }
+            this.setStatus(pollData.statusDiv, sumupPaymentData.strings.pollTimedOut, 'timeout');
+            this.appendLog('warning', sumupPaymentData.strings.pollTimedOut);
+            pollData.cancelRequested = true;
+            this.requestCancellation(pollData);
+        },
         /**
          * Handle payment status response
          */
         handlePaymentStatusResponse: function(pollData, data) {
-            const { status, message, continue_polling, submit_form } = data;
-            
-            // Update status message
-            pollData.statusDiv.html('<div class="sumup-status-' + status.toLowerCase() + '">' + message + '</div>');
+            const { status, message, continue_polling, submit_form, reader_status } = data;
+            const readerMessage = this.formatReaderStatus(reader_status);
+            const displayMessage = pollData.cancelRequested && continue_polling
+                ? (pollData.cancelMessage || sumupPaymentData.strings.cancellingPayment)
+                : (readerMessage && continue_polling ? readerMessage : message);
+            this.setStatus(pollData.statusDiv, displayMessage, status.toLowerCase());
+            if (pollData.lastMessage !== displayMessage) {
+                this.appendLog(status === 'PAID' ? 'success' : 'info', displayMessage);
+                pollData.lastMessage = displayMessage;
+            }
             
             // If we shouldn't continue polling, stop
             if (!continue_polling) {
-                this.stopPolling(pollData);
+                this.stopAllPollingForReader(pollData.readerId);
                 
                 if (submit_form && status === 'PAID') {
                     // Payment successful - submit the checkout form
@@ -224,6 +401,19 @@
             }
         },
 
+        formatReaderStatus: function(readerStatus) {
+            const states = {
+                IDLE: sumupPaymentData.strings.readerReady,
+                SELECTING_TIP: sumupPaymentData.strings.readerSelectingTip,
+                WAITING_FOR_CARD: sumupPaymentData.strings.readerWaitingForCard,
+                WAITING_FOR_PIN: sumupPaymentData.strings.readerWaitingForPin,
+                WAITING_FOR_SIGNATURE: sumupPaymentData.strings.readerWaitingForSignature,
+                UPDATING_FIRMWARE: sumupPaymentData.strings.readerUpdatingFirmware
+            };
+            if (!readerStatus || (!readerStatus.state && !readerStatus.status)) return '';
+            if (readerStatus.status === 'OFFLINE') return sumupPaymentData.strings.readerOffline;
+            return states[readerStatus.state] || sumupPaymentData.strings.readerStatus + ' ' + (readerStatus.state || readerStatus.status);
+        },
         /**
          * Handle successful payment
          */
@@ -249,32 +439,28 @@
                 return;
             }
             
-            // Final fallback: try to find any form on the page
-            const anyForm = $('form').first();
-            if (anyForm.length > 0) {
-                anyForm.submit();
-            } else {
-                // No form found, just show success message
-                pollData.statusDiv.html('<div class="sumup-status-success">Payment successful! Please refresh the page to continue.</div>');
-            }
+            this.setStatus(pollData.statusDiv, sumupPaymentData.strings.paymentSuccess, 'success');
         },
 
         /**
          * Stop polling
          */
         stopPolling: function(pollData) {
+            pollData.active = false;
             if (pollData.intervalId) {
                 clearInterval(pollData.intervalId);
                 pollData.intervalId = null;
             }
+            if (this.activePolls[pollData.readerId] === pollData) delete this.activePolls[pollData.readerId];
         },
 
         /**
          * Reset payment interface to initial state
          */
         resetPaymentInterface: function(startBtn, cancelBtn, statusDiv) {
-            startBtn.prop('disabled', false).text('Start Payment');
-            cancelBtn.hide();
+            $('.sumup-checkout-btn').prop('disabled', false).text(sumupPaymentData.strings.startPayment);
+            $('.sumup-check-status-btn').prop('disabled', false);
+            cancelBtn.prop('hidden', true).prop('disabled', false);
         },
 
         /**
@@ -289,8 +475,17 @@
          * Handle AJAX errors
          */
         handleAjaxError: function(xhr, statusDiv, startBtn, cancelBtn) {
+            const errorMessage = this.ajaxErrorMessage(xhr);
+            if (cancelBtn) {
+                this.resetPaymentInterface(startBtn, cancelBtn, statusDiv);
+            } else {
+                startBtn.prop('disabled', false).text(sumupPaymentData.strings.startPayment);
+            }
+            this.showError(statusDiv, errorMessage);
+        },
+
+        ajaxErrorMessage: function(xhr) {
             let errorMessage = sumupPaymentData.strings.networkError;
-            
             if (xhr.responseJSON && xhr.responseJSON.data) {
                 errorMessage = xhr.responseJSON.data;
             } else if (xhr.responseText) {
@@ -303,36 +498,35 @@
                     // Keep default error message
                 }
             }
-
-            if (cancelBtn) {
-                this.resetPaymentInterface(startBtn, cancelBtn, statusDiv);
-            } else {
-                startBtn.prop('disabled', false).text('Start Payment');
-            }
-            
-            this.showError(statusDiv, errorMessage);
+            return errorMessage;
         },
 
         /**
          * Show error message
          */
         showError: function(statusDiv, message) {
-            statusDiv.html('<div class="sumup-status-error" style="color: #d63638; padding: 5px; background: #fcf0f1; border: 1px solid #d63638; border-radius: 3px;">' + 
-                          sumupPaymentData.strings.paymentFailed + ' ' + message + '</div>');
+            const errorMessage = sumupPaymentData.strings.paymentFailed + ' ' + message;
+            this.setStatus(statusDiv, errorMessage, 'error');
+            this.appendLog('error', errorMessage);
+        },
+
+        setStatus: function(statusDiv, message, level) {
+            statusDiv.empty().append($('<div>').addClass('sumup-status-' + level).text(message || ''));
         },
 
         /**
          * Stop all polling for a specific reader (utility function)
          */
         stopAllPollingForReader: function(readerId) {
-            // This is a simple implementation - in a more complex scenario, 
-            // you might want to track active polling instances
+            if (this.activePolls[readerId]) this.stopPolling(this.activePolls[readerId]);
         }
     };
+
+    if (typeof module === 'object' && module.exports) module.exports = sumupPayment;
 
     // Initialize when document is ready
     $(document).ready(function() {
         sumupPayment.init();
     });
 
-})(jQuery); 
+})(jQuery);

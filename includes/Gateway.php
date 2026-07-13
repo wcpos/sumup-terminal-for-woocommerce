@@ -128,7 +128,14 @@ class Gateway extends WC_Payment_Gateway {
 					'id' => 'api_key',
 				),
 			),
-
+			'show_payment_logs' => array(
+				'title'       => __( 'Checkout debug logs', 'sumup-terminal-for-woocommerce' ),
+				'type'        => 'checkbox',
+				'label'       => __( 'Show detailed SumUp payment logs at checkout.', 'sumup-terminal-for-woocommerce' ),
+				'description' => __( 'Off by default. Enable when gathering logs for support. Payment activity is always recorded in WooCommerce → Status → Logs.', 'sumup-terminal-for-woocommerce' ),
+				'desc_tip'    => true,
+				'default'     => 'no',
+			),
 		);
 	}
 
@@ -296,9 +303,11 @@ class Gateway extends WC_Payment_Gateway {
 			// Default behavior for the main checkout page.
 			$order_id = null;
 		}
+		$order     = $order_id ? wc_get_order( $order_id ) : false;
+		$order_key = $order ? $order->get_order_key() : '';
 
 		// Display reader selection and controls
-		echo '<div id="sumup-terminal-payment-interface">';
+		echo '<div id="sumup-terminal-payment-interface" data-order-id="' . esc_attr( $order_id ) . '" data-order-key="' . esc_attr( $order_key ) . '">';
 		echo '<h4>' . esc_html__( 'Available SumUp Terminal Readers', 'sumup-terminal-for-woocommerce' ) . '</h4>';
 
 		foreach ( $readers as $reader ) {
@@ -307,28 +316,45 @@ class Gateway extends WC_Payment_Gateway {
 				continue;
 			}
 
-			$reader_id     = esc_attr( $reader['id'] );
+			$reader_id     = (string) $reader['id'];
 			$reader_name   = esc_html( $reader['name'] ?? __( 'Unnamed Reader', 'sumup-terminal-for-woocommerce' ) );
 			$reader_status = esc_html( ucfirst( $reader['status'] ?? __( 'Unknown', 'sumup-terminal-for-woocommerce' ) ) );
 
-			echo '<div class="sumup-reader-card" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 4px; background: #f9f9f9;">';
+			echo '<div class="sumup-reader-card">';
 			echo '<div class="reader-info">';
 			echo '<strong>' . $reader_name . '</strong>';
 			echo '<br><small>' . esc_html__( 'Status:', 'sumup-terminal-for-woocommerce' ) . ' ' . $reader_status . '</small>';
 			echo '<br><small>' . esc_html__( 'Model:', 'sumup-terminal-for-woocommerce' ) . ' ' . esc_html( $reader['device']['model'] ?? $reader['model'] ?? __( 'Unknown', 'sumup-terminal-for-woocommerce' ) ) . '</small>';
 			echo '</div>';
 			
-			echo '<div class="reader-controls" style="margin-top: 10px;">';
-			echo '<button type="button" class="button button-primary sumup-checkout-btn" data-reader-id="' . $reader_id . '" data-order-id="' . esc_attr( $order_id ) . '">';
+			echo '<div class="reader-controls">';
+			echo '<button type="button" class="button button-primary sumup-checkout-btn" data-reader-id="' . esc_attr( $reader_id ) . '" data-order-id="' . esc_attr( $order_id ) . '">';
 			echo esc_html__( 'Start Payment', 'sumup-terminal-for-woocommerce' );
 			echo '</button>';
-			
-			echo ' <button type="button" class="button button-secondary sumup-cancel-btn" data-reader-id="' . $reader_id . '" style="display: none;">';
+			echo '<button type="button" class="button sumup-check-status-btn" data-reader-id="' . esc_attr( $reader_id ) . '" data-order-id="' . esc_attr( $order_id ) . '">';
+			echo esc_html__( 'Check Status', 'sumup-terminal-for-woocommerce' );
+			echo '</button>';
+			echo '<button type="button" class="button sumup-cancel-btn" data-reader-id="' . esc_attr( $reader_id ) . '" data-order-id="' . esc_attr( $order_id ) . '" hidden>';
 			echo esc_html__( 'Cancel Payment', 'sumup-terminal-for-woocommerce' );
 			echo '</button>';
 			echo '</div>';
-			
-			echo '<div class="payment-status" id="payment-status-' . $reader_id . '" style="margin-top: 10px;"></div>';
+			echo '<div class="payment-status" id="payment-status-' . esc_attr( $reader_id ) . '" role="status" aria-live="polite"></div>';
+			echo '</div>';
+		}
+
+		if ( 'yes' === $this->get_option( 'show_payment_logs', 'no' ) ) {
+			echo '<div class="sumup-logging-section">';
+			echo '<div class="sumup-logging-header">';
+			echo '<strong>' . esc_html__( 'Payment logs', 'sumup-terminal-for-woocommerce' ) . '</strong>';
+			echo '<div class="sumup-logging-actions">';
+			echo '<button type="button" class="button sumup-toggle-log" aria-expanded="false">' . esc_html__( 'Show logs', 'sumup-terminal-for-woocommerce' ) . '</button>';
+			echo '<button type="button" class="button sumup-copy-log">' . esc_html__( 'Copy', 'sumup-terminal-for-woocommerce' ) . '</button>';
+			echo '<button type="button" class="button sumup-clear-log">' . esc_html__( 'Clear', 'sumup-terminal-for-woocommerce' ) . '</button>';
+			echo '</div>';
+			echo '</div>';
+			echo '<div class="sumup-log-content" hidden>';
+			echo '<textarea class="sumup-payment-log-textarea" readonly placeholder="' . esc_attr__( 'SumUp payment activity will appear here.', 'sumup-terminal-for-woocommerce' ) . '"></textarea>';
+			echo '</div>';
 			echo '</div>';
 		}
 
@@ -468,6 +494,29 @@ class Gateway extends WC_Payment_Gateway {
 					'paymentSuccess'     => __( 'Payment successful!', 'sumup-terminal-for-woocommerce' ),
 					'paymentFailed'      => __( 'Payment failed:', 'sumup-terminal-for-woocommerce' ),
 					'networkError'       => __( 'Network error occurred', 'sumup-terminal-for-woocommerce' ),
+					'startPayment'       => __( 'Start Payment', 'sumup-terminal-for-woocommerce' ),
+					'paymentStarted'     => __( 'Payment started', 'sumup-terminal-for-woocommerce' ),
+					'checkingStatus'     => __( 'Checking reader status…', 'sumup-terminal-for-woocommerce' ),
+					'cancelConfirm'      => __( 'Are you sure you want to cancel this payment?', 'sumup-terminal-for-woocommerce' ),
+					'cancellingPayment'  => __( 'Requesting cancellation…', 'sumup-terminal-for-woocommerce' ),
+					'followReader'       => __( 'Follow the instructions on the card reader.', 'sumup-terminal-for-woocommerce' ),
+					'pollTimedOut'       => __( 'Payment status timed out. Requesting cancellation…', 'sumup-terminal-for-woocommerce' ),
+					'logsShown'          => __( 'Hide logs', 'sumup-terminal-for-woocommerce' ),
+					'logsHidden'         => __( 'Show logs', 'sumup-terminal-for-woocommerce' ),
+					'logsCopied'         => __( 'Logs copied to clipboard.', 'sumup-terminal-for-woocommerce' ),
+					'logsCopyFailed'     => __( 'Unable to copy logs automatically.', 'sumup-terminal-for-woocommerce' ),
+					'logCleared'         => __( 'Log cleared.', 'sumup-terminal-for-woocommerce' ),
+					'panelReady'         => __( 'SumUp payment panel ready.', 'sumup-terminal-for-woocommerce' ),
+					'statusAlreadyChecking' => __( 'A status check is already in progress.', 'sumup-terminal-for-woocommerce' ),
+					'cancellationPendingTimeout' => __( 'Cancellation is still pending. Use Check Status before starting another payment.', 'sumup-terminal-for-woocommerce' ),
+					'readerReady'        => __( 'Reader is ready.', 'sumup-terminal-for-woocommerce' ),
+					'readerSelectingTip' => __( 'Waiting for tip selection on the reader.', 'sumup-terminal-for-woocommerce' ),
+					'readerWaitingForCard' => __( 'Waiting for the customer to present a card.', 'sumup-terminal-for-woocommerce' ),
+					'readerWaitingForPin' => __( 'Waiting for PIN entry on the reader.', 'sumup-terminal-for-woocommerce' ),
+					'readerWaitingForSignature' => __( 'Waiting for the customer signature.', 'sumup-terminal-for-woocommerce' ),
+					'readerUpdatingFirmware' => __( 'Reader firmware update in progress.', 'sumup-terminal-for-woocommerce' ),
+					'readerOffline'      => __( 'Reader is offline.', 'sumup-terminal-for-woocommerce' ),
+					'readerStatus'       => __( 'Reader status:', 'sumup-terminal-for-woocommerce' ),
 				),
 			)
 		);
@@ -644,7 +693,7 @@ class Gateway extends WC_Payment_Gateway {
 				$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 				$actions .= '</ol>';
 				$actions .= '<p>';
-				$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" maxlength="10" style="text-transform: uppercase; width: 200px; margin-right: 10px;" />';
+				$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" style="text-transform: uppercase; width: 200px; margin-right: 10px;" />';
 				$actions .= '<button type="button" class="button-primary sumup-btn" data-action="pair-reader">' . __( 'Pair Reader', 'sumup-terminal-for-woocommerce' ) . '</button>';
 				$actions .= '</p>';
 				$actions .= '<div id="sumup-pair-result"></div>';
@@ -703,7 +752,7 @@ class Gateway extends WC_Payment_Gateway {
 			$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 			$actions .= '</ol>';
 			$actions .= '<p>';
-			$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" maxlength="8" style="text-transform: uppercase; width: 120px; margin-right: 10px;" />';
+			$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" style="text-transform: uppercase; width: 200px; margin-right: 10px;" />';
 			$actions .= '<button type="button" class="button-primary sumup-btn" data-action="pair-reader">' . __( 'Pair Reader', 'sumup-terminal-for-woocommerce' ) . '</button>';
 			$actions .= '</p>';
 			$actions .= '<div id="sumup-pair-result"></div>';
@@ -723,7 +772,7 @@ class Gateway extends WC_Payment_Gateway {
 			$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 			$actions .= '</ol>';
 			$actions .= '<p>';
-			$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" maxlength="8" style="text-transform: uppercase; width: 120px; margin-right: 10px;" />';
+			$actions .= '<input type="text" id="sumup-pairing-code" placeholder="' . __( 'Enter pairing code', 'sumup-terminal-for-woocommerce' ) . '" style="text-transform: uppercase; width: 200px; margin-right: 10px;" />';
 			$actions .= '<button type="button" class="button-primary sumup-btn" data-action="pair-reader">' . __( 'Pair Reader', 'sumup-terminal-for-woocommerce' ) . '</button>';
 			$actions .= '</p>';
 			$actions .= '<div id="sumup-pair-result"></div>';
