@@ -307,7 +307,10 @@
                     clearInterval(pollData.intervalId);
                     pollData.intervalId = null;
                     pollData.timeoutPending = true;
-                    if (!pollData.requestPending) self.requestPaymentStatus(pollData);
+                    if (!pollData.requestPending) {
+                        pollData.timeoutFinalCheckRunning = true;
+                        self.requestPaymentStatus(pollData);
+                    }
                     return;
                 }
 
@@ -344,8 +347,14 @@
             request.always(() => {
                 pollData.requestPending = false;
                 if (pollData.timeoutPending && pollData.active) {
-                    pollData.timeoutPending = false;
-                    this.handlePollingTimeout(pollData);
+                    if (pollData.timeoutFinalCheckRunning) {
+                        pollData.timeoutPending = false;
+                        pollData.timeoutFinalCheckRunning = false;
+                        this.handlePollingTimeout(pollData);
+                    } else {
+                        pollData.timeoutFinalCheckRunning = true;
+                        this.requestPaymentStatus(pollData);
+                    }
                 }
             });
             return request;
@@ -512,6 +521,8 @@
             if (this.activePolls[readerId]) this.stopPolling(this.activePolls[readerId]);
         }
     };
+
+    if (typeof module === 'object' && module.exports) module.exports = sumupPayment;
 
     // Initialize when document is ready
     $(document).ready(function() {
