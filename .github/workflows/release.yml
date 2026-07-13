@@ -24,14 +24,14 @@ jobs:
         id: check_version
         run: |
           VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*" sumup-terminal-for-woocommerce.php)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           git fetch --prune --unshallow
           if git tag | grep -q "v$VERSION"; then
             echo "Version has not changed. Skipping release..."
-            echo "::set-output name=release::false"
+            echo "release=false" >> "$GITHUB_OUTPUT"
           else
             echo "Version has changed. Creating new release..."
-            echo "::set-output name=release::true"
+            echo "release=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install composer dependencies
@@ -47,6 +47,7 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           release_name: Release v${{ env.VERSION }}
+          body_path: docs/releases/${{ env.VERSION }}.md
           draft: false
           prerelease: false
 
