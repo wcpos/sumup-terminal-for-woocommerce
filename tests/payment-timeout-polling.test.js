@@ -118,6 +118,55 @@ test('reloads an empty SumUp panel from the current payment page', () => {
     global.jQuery.select = select;
 });
 
+test('leaves an existing SumUp reader selection untouched', (t) => {
+    const payment = require('../assets/js/payment.js'), select = global.jQuery.select;
+    const readerRequest = payment.readerRequest;
+    let loadCalls = 0;
+    const paymentBox = {
+        length: 1,
+        find: function(selector) { return { length: selector === '.sumup-reader-card' ? 1 : 0 }; },
+        load: function() { loadCalls++; }
+    };
+    t.after(function() { global.jQuery.select = select; payment.readerRequest = readerRequest; });
+    global.jQuery.select = function() { return paymentBox; };
+    payment.readerRequest = null;
+    payment.loadReaders();
+    assert.equal(loadCalls, 0, 'an existing reader selection must not be replaced');
+    assert.equal(payment.readerRequest, null, 'no reader request should start');
+});
+
+test('renders the network error when reader loading fails', (t) => {
+    const payment = require('../assets/js/payment.js'), select = global.jQuery.select;
+    const paymentData = global.sumupPaymentData;
+    const paymentState = [payment.readerRequest, payment.readerRetryPending];
+    let renderedMessage = '';
+    const emptyResult = { length: 0, first: function() { return this; } };
+    const errorResult = {
+        length: 1,
+        first: function() { return this; },
+        find: function() { return this; },
+        text: function(message) { renderedMessage = message; }
+    };
+    const paymentBox = {
+        length: 1,
+        find: function(selector) { return selector === '.woocommerce-error' ? errorResult : emptyResult; },
+        load: function(_url, callback) { callback('', 'error'); }
+    };
+    t.after(function() {
+        global.jQuery.select = select;
+        if (paymentData === undefined) delete global.sumupPaymentData;
+        else global.sumupPaymentData = paymentData;
+        [payment.readerRequest, payment.readerRetryPending] = paymentState;
+    });
+    global.jQuery.select = function(selector) { return selector === '.payment_box.payment_method_sumup_terminal_for_woocommerce' ? paymentBox : emptyResult; };
+    global.sumupPaymentData = { strings: { networkError: 'Unable to load readers.' } };
+    payment.readerRequest = null;
+    payment.readerRetryPending = false;
+    payment.loadReaders();
+    assert.equal(renderedMessage, 'Unable to load readers.');
+    assert.equal(payment.readerRequest, null, 'the panel can be retried after a failed load');
+});
+
 test('retries reader loading after checkout refreshes during a request', () => {
     const payment = require('../assets/js/payment.js');
     const select = global.jQuery.select;
