@@ -9,6 +9,9 @@
     // Initialize the payment interface
     const sumupPayment = {
         activePolls: {},
+        gatewayId: 'sumup_terminal_for_woocommerce',
+        readerRequest: null,
+        readerRetryPending: false,
         
         /**
          * Initialize payment handlers
@@ -17,7 +20,8 @@
             this.bindEvents();
             this.setAjaxUrl();
             this.restoreLogs();
-            $(document.body).on('updated_checkout', this.restoreLogs.bind(this));
+            this.loadReadersIfSelected();
+            $(document.body).on('updated_checkout', this.handleCheckoutUpdated.bind(this));
         },
 
         /**
@@ -40,6 +44,71 @@
             $(document).on('click', '.sumup-toggle-log', this.toggleLogs.bind(this));
             $(document).on('click', '.sumup-copy-log', this.copyLogs.bind(this));
             $(document).on('click', '.sumup-clear-log', this.clearLogs.bind(this));
+            $(document).on('change', 'input[name="payment_method"]', this.handlePaymentMethodChange.bind(this));
+        },
+
+        handleCheckoutUpdated: function() {
+            this.restoreLogs();
+            this.loadReadersIfSelected();
+        },
+
+        handlePaymentMethodChange: function(event) {
+            if ($(event.currentTarget).val() === this.gatewayId) {
+                this.loadReaders();
+            }
+        },
+
+        loadReadersIfSelected: function() {
+            const selectedGateway = $('input[name="payment_method"]:checked');
+            if (selectedGateway.length && selectedGateway.val() === this.gatewayId) {
+                this.loadReaders();
+            }
+        },
+
+        loadReaders: function() {
+            if (this.readerRequest) {
+                this.readerRetryPending = true;
+                return;
+            }
+
+            const paymentBox = $('.payment_box.payment_method_' + this.gatewayId);
+
+            if (
+                !paymentBox.length ||
+                paymentBox.find('.sumup-reader-card').length ||
+                !window.location ||
+                !window.location.href
+            ) return;
+
+            const existingError = paymentBox.find('.woocommerce-error').first();
+            if (existingError.length) {
+                existingError.find('p').text(sumupPaymentData.strings.checkingStatus);
+            }
+
+            this.readerRequest = true;
+            // Opening a gateway only reveals its existing markup. Re-fetch the box so
+            // an empty initial render gets another chance to load the paired readers.
+            paymentBox.load(
+                window.location.href + ' .payment_box.payment_method_' + this.gatewayId,
+                (_response, status) => {
+                    if (status === 'error') {
+                        let error = paymentBox.find('.woocommerce-error').first();
+                        if (!error.length) {
+                            error = $('<div>').addClass('woocommerce-error').appendTo(paymentBox);
+                        }
+                        if (!error.find('p').length) {
+                            error.append($('<p>'));
+                        }
+                        error.find('p').first().text(sumupPaymentData.strings.networkError);
+                    }
+                    this.restoreLogs();
+                    this.readerRequest = null;
+                    if (this.readerRetryPending) {
+                        this.readerRetryPending = false;
+                        this.loadReadersIfSelected();
+                    }
+                }
+            );
         },
 
         appendLog: function(level, message) {
