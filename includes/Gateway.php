@@ -246,6 +246,14 @@ class Gateway extends WC_Payment_Gateway {
 
 		// Check if the order is already paid.
 		if ( ! $order->is_paid() ) {
+			$checkout_status    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
+			$transaction_status = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
+			if ( 'PAID' !== $checkout_status && 'SUCCESSFUL' !== $transaction_status ) {
+				wc_add_notice( __( 'The terminal payment has not completed yet.', 'sumup-terminal-for-woocommerce' ), 'error' );
+
+				return array( 'result' => 'failure' );
+			}
+
 			$order->payment_complete();
 		}
 
