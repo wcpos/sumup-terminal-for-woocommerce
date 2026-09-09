@@ -24,7 +24,10 @@ foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_t
 	expect( array() === $requests, 'unconfirmed transaction not refunded' );
 }
 $transactions->result = server_transaction();
-foreach ( array( new WP_Error( 'timeout', 'Timed out' ), new RuntimeException( 'bad' ), array( 'response' => array( 'code' => 400 ), 'body' => '{"message":"Rejected"}' ) ) as $response ) {
-	provider_error_expect( $provider->refund( server_row(), 45, '12.30' ), is_wp_error( $response ) ? 'timeout' : 'sumup_refund_rejected' );
+foreach ( array( array( new WP_Error( 'timeout', 'Timed out' ), 'timeout' ), array( new RuntimeException( 'bad' ), 'sumup_api_error' ), array( array( 'response' => array( 'code' => 400 ), 'body' => '{"message":"Rejected"}' ), 'sumup_refund_rejected' ) ) as $case ) {
+	list( $response, $expected ) = $case;
+	$result = $provider->refund( server_row(), 45, '12.30' );
+	provider_error_expect( $result, $expected );
+	if ( 'sumup_refund_rejected' === $expected ) { expect( 'Rejected' === $result->get_error_message(), "SumUp's reason is surfaced" ); }
 }
 echo "server-refund ok\n";
