@@ -20,3 +20,17 @@
 
 1. Selecting the SumUp Terminal gateway will allow you to start a new payment, or cancel a payment currently in process. The order will automatically complete once a successful payment is detected.
 <img alt="sumup-checkout" src="https://github.com/user-attachments/assets/b6a8ab0d-9295-4195-afc4-f9af9bf12886" />
+
+### WooCommerce POS 1.11 checkout
+
+With WooCommerce POS Pro 1.11.0 or newer, SumUp Solo accepts payments through the
+POS checkout tile using the cloud Readers API; Virtual Solo works for testing.
+The **Affiliate App ID** and **Affiliate Key** fields in the gateway settings are optional:
+SumUp asks new Cloud API integrations to send them (create them under
+[SumUp Affiliate Keys](https://developer.sumup.com/tools/authorization/affiliate-keys/)),
+and the checkout tile works without them. They are sent only when both are filled and
+never change the legacy checkout. SumUp Air is not supported
+by this cloud integration.
+
+The result webhook URL is supplied automatically when a payment starts. The
+existing order-pay checkout remains available, including without Pro 1.11+.
