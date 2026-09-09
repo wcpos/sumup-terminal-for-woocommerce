@@ -12,6 +12,8 @@
  * Requires at least: 5.2
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
+ *
+ * @package WCPOS\WooCommercePOS\SumUpTerminal
  */
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal;
@@ -66,6 +68,7 @@ spl_autoload_register(
  */
 function sutwc_activate(): void {
 	if ( PHP_VERSION_ID >= SUTWC_MINIMUM_PHP_VERSION_ID ) {
+		Server\Registration::activation_check( __FILE__ );
 		return;
 	}
 
@@ -97,3 +100,5 @@ function init(): void {
 	new AjaxHandler();
 }
 add_action( 'plugins_loaded', __NAMESPACE__ . '\init', 11 );
+
+add_action( 'plugins_loaded', array( Server\Registration::class, 'register' ), 30 );

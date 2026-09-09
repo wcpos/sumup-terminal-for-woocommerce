@@ -1,0 +1,62 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - next
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Exercise the plugin floor and the lint runtime.
+        php: ['7.4', '8.3']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer
+
+      - name: Generate plugin autoloader
+        run: composer dump-autoload --no-dev
+
+      - name: Lint PHP syntax
+        run: |
+          set -euo pipefail
+          # The bundled SDK is PHP 8.2+ and runtime-gated; lint it on 8.3 only.
+          if [ '${{ matrix.php }}' = '7.4' ]; then
+            find . \( -path './vendor' -o -path './php-scoper/vendor' -o -path './vendor_prefixed/sumup-sdk' \) -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+          else
+            find . \( -path './vendor' -o -path './php-scoper/vendor' \) -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
+          fi
+
+      - name: Regression tests
+        run: |
+          set -euo pipefail
+          for f in tests/regression/*.php; do
+            echo "== $f"
+            php "$f"
+          done
+
+      - name: Install lint dependencies
+        if: matrix.php == '8.3'
+        run: composer install --no-interaction --prefer-dist
+
+      - name: PHPCS (files owned by the 1.11 server-mode landing)
+        if: matrix.php == '8.3'
+        # The legacy files carry pre-existing PHPCS debt (139 errors on `next` at 2026-09-09); they are
+        # linted when they are cleaned up, not here, so this check reflects the code this lane owns.
+        run: vendor/bin/phpcs --standard=./.phpcs.xml.dist sumup-terminal-for-woocommerce.php includes/Settings.php includes/Gateway.php includes/Server includes/Services/RefundClient.php

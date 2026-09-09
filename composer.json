@@ -49,7 +49,8 @@
             "php tools/prefix-sumup-sdk-namespaces.php",
             "php tools/generate-prefixed-sumup-autoload.php",
             "composer dump-autoload -o"
-        ]
+        ],
+        "test": "for f in tests/regression/*.php; do php $f || exit 1; done"
     },
     "autoload": {
         "psr-4": {
