@@ -325,8 +325,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 */
 	public static function webhook_patch( array $event, $transaction ): array {
 		$payload = $event['payload'];
-		$patch = array( 'event_id' => ! empty( $event['id'] ) ? $event['id'] : $payload['client_transaction_id'] . ':' . $payload['status'] );
-		if ( 'successful' === $payload['status'] && 'SUCCESSFUL' === ( $transaction['status'] ?? '' ) && ( $transaction['client_transaction_id'] ?? null ) === $payload['client_transaction_id'] ) {
+		// A delivery may omit fields; treat a missing status as a non-money event.
+		$status = strtolower( (string) ( $payload['status'] ?? '' ) );
+		$patch = array( 'event_id' => ! empty( $event['id'] ) ? $event['id'] : $payload['client_transaction_id'] . ':' . ( '' !== $status ? $status : 'unknown' ) );
+		if ( 'successful' === $status && 'SUCCESSFUL' === ( $transaction['status'] ?? '' ) && ( $transaction['client_transaction_id'] ?? null ) === $payload['client_transaction_id'] ) {
 			$normalized = self::normalize( $transaction );
 			$patch += array(
 				'status' => 'captured',

@@ -25,6 +25,6 @@ foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_t
 }
 $transactions->result = server_transaction();
 foreach ( array( new WP_Error( 'timeout', 'Timed out' ), new RuntimeException( 'bad' ), array( 'response' => array( 'code' => 400 ), 'body' => '{"message":"Rejected"}' ) ) as $response ) {
-	provider_error_expect( $provider->refund( server_row(), 45, '12.30' ), is_wp_error( $response ) ? 'timeout' : 'sumup_api_error' );
+	provider_error_expect( $provider->refund( server_row(), 45, '12.30' ), is_wp_error( $response ) ? 'timeout' : 'sumup_refund_rejected' );
 }
 echo "server-refund ok\n";

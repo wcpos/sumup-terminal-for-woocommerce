@@ -31,6 +31,13 @@ class RefundClient extends HttpClient {
 		);
 		if ( is_wp_error( $response ) ) {
 			return $response; }
-		return in_array( wp_remote_retrieve_response_code( $response ), array( 200, 204 ), true );
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( in_array( $code, array( 200, 204 ), true ) ) {
+			return true;
+		}
+		// Surface SumUp's reason (e.g. {"message":"Rejected"}) instead of a bare failure.
+		$body    = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$message = is_array( $body ) ? (string) ( $body['message'] ?? $body['error_description'] ?? $body['error_message'] ?? '' ) : '';
+		return new \WP_Error( 'sumup_refund_rejected', '' !== $message ? $message : sprintf( 'SumUp refund failed (HTTP %d).', $code ), array( 'status' => $code ) );
 	}
 }

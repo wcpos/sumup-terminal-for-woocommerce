@@ -25,10 +25,11 @@
 
 With WooCommerce POS Pro 1.11.0 or newer, SumUp Solo accepts payments through the
 POS checkout tile using the cloud Readers API; Virtual Solo works for testing.
-In the SumUp gateway settings, enter both **Affiliate App ID** and **Affiliate Key**
-from [SumUp Affiliate Keys](https://developer.sumup.com/tools/authorization/affiliate-keys/)
-for the new server checkout integration. These credentials are sent only when both
-fields are filled; they do not change legacy checkout. SumUp Air is not supported
+The **Affiliate App ID** and **Affiliate Key** fields in the gateway settings are optional:
+SumUp asks new Cloud API integrations to send them (create them under
+[SumUp Affiliate Keys](https://developer.sumup.com/tools/authorization/affiliate-keys/)),
+and the checkout tile works without them. They are sent only when both are filled and
+never change the legacy checkout. SumUp Air is not supported
 by this cloud integration.
 
 The result webhook URL is supplied automatically when a payment starts. The
