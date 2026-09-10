@@ -365,11 +365,15 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	private function lookup( string $client_id ) {
 		$response = $this->call(
 			function () use ( $client_id ) {
-				return $this->transactions->get_by_client_transaction_id( $client_id );
+				return $this->transactions->find_by_client_transaction_id( $client_id );
 			}
 		);
 		if ( is_wp_error( $response ) ) {
 			return self::error( $response );
+		}
+		if ( null === $response ) {
+			// SumUp has no transaction for this checkout yet: still waiting on the device.
+			return array();
 		}
 		foreach ( $response['items'] ?? array( $response ) as $transaction ) {
 			if ( '' !== $client_id && ( $transaction['client_transaction_id'] ?? null ) === $client_id ) {
