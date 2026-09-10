@@ -148,6 +148,16 @@ class Gateway extends WC_Payment_Gateway {
 				'description' => __( 'For POS server checkout, enter the matching key from <a href="https://developer.sumup.com/tools/authorization/affiliate-keys/">SumUp Affiliate Keys</a>.', 'sumup-terminal-for-woocommerce' ),
 				'default' => '',
 			),
+			'default_reader' => $this->default_terminal_field(),
+			'allowed_readers' => $this->enabled_terminals_field(),
+			'lock_to_default' => array(
+				'title'       => __( 'Lock terminal selection', 'sumup-terminal-for-woocommerce' ),
+				'type'        => 'checkbox',
+				'label'       => __( 'Cashiers cannot change the terminal at checkout.', 'sumup-terminal-for-woocommerce' ),
+				'description' => __( 'Requires a default terminal.', 'sumup-terminal-for-woocommerce' ),
+				'desc_tip'    => true,
+				'default'     => 'no',
+			),
 			'show_payment_logs' => array(
 				'title'       => __( 'Checkout debug logs', 'sumup-terminal-for-woocommerce' ),
 				'type'        => 'checkbox',
@@ -157,6 +167,90 @@ class Gateway extends WC_Payment_Gateway {
 				'default'     => 'no',
 			),
 		);
+		if ( null === $this->form_fields['allowed_readers'] ) {
+			unset( $this->form_fields['allowed_readers'] );
+		}
+	}
+
+	/**
+	 * Build the default terminal field, falling back to a saved text ID.
+	 *
+	 * @return array Field definition.
+	 */
+	private function default_terminal_field(): array {
+		$options = $this->fetch_terminal_options();
+		$field = array(
+			'title'       => __( 'Default terminal', 'sumup-terminal-for-woocommerce' ),
+			'type'        => null === $options ? 'text' : 'select',
+			'description' => __( 'Terminal used by default at POS checkout.', 'sumup-terminal-for-woocommerce' ),
+			'desc_tip'    => true,
+			'default'     => '',
+		);
+		if ( null !== $options ) {
+			$field['options'] = array( '' => __( '— Select a terminal —', 'sumup-terminal-for-woocommerce' ) ) + $options;
+		}
+		return $field;
+	}
+
+	/**
+	 * Omit the multiselect on discovery failure so saves preserve its value.
+	 *
+	 * @return array|null Field definition or unavailable discovery.
+	 */
+	private function enabled_terminals_field(): ?array {
+		$options = $this->fetch_terminal_options();
+		if ( null === $options ) {
+			return null;
+		}
+		return array(
+			'title'       => __( 'Enabled terminals', 'sumup-terminal-for-woocommerce' ),
+			'type'        => 'multiselect',
+			'class'       => 'wc-enhanced-select',
+			'options'     => $options,
+			'default'     => array(),
+			'description' => __( 'Limit POS terminal choices, or leave empty to allow all terminals.', 'sumup-terminal-for-woocommerce' ),
+			'desc_tip'    => true,
+		);
+	}
+
+	/**
+	 * Request-local discovery result, including failure.
+	 *
+	 * @var array|null|false
+	 */
+	private $terminal_options_cache = false;
+
+	/**
+	 * Fetch the provider's reader choices only on this gateway's settings page.
+	 *
+	 * @return array|null Reader ID to label map, or unavailable discovery.
+	 */
+	private function fetch_terminal_options(): ?array {
+		if ( false !== $this->terminal_options_cache ) {
+			return $this->terminal_options_cache;
+		}
+		$this->terminal_options_cache = null;
+		$section = isset( $_GET['section'] ) ? sanitize_text_field( wp_unslash( $_GET['section'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! is_admin() || wp_doing_ajax() || Settings::GATEWAY_ID !== $section || '' === Settings::api_key() || ! Server\Registration::pro_supported() ) {
+			return null;
+		}
+		$cache_key = 'sutwc_terminal_choices_' . md5( Settings::api_key() );
+		$cached = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			$this->terminal_options_cache = $cached;
+			return $cached;
+		}
+		$readers = ( new Server\SumUp_Server_Provider( $this->profile_service, $this->reader_service ) )->list_readers();
+		if ( is_wp_error( $readers ) ) {
+			return null;
+		}
+		$options = array();
+		foreach ( $readers as $reader ) {
+			$options[ $reader['id'] ] = sprintf( '%s (%s)', $reader['label'], $reader['id'] );
+		}
+		set_transient( $cache_key, $options, 5 * MINUTE_IN_SECONDS );
+		$this->terminal_options_cache = $options;
+		return $options;
 	}
 
 	/**
@@ -415,6 +509,7 @@ class Gateway extends WC_Payment_Gateway {
 	public function process_admin_options() {
 		$old_api_key = $this->api_key;
 		$result      = parent::process_admin_options();
+		Server\Pos_Reader_Settings::mirror( Settings::get_gateway_settings() );
 
 		// Reload the API key and reinitialize services.
 		$this->api_key = $this->get_option( 'api_key' );
