@@ -11,11 +11,11 @@ expect( 'M123' === $description['provider_data']['merchant_code'], 'merchant met
 foreach ( array( false, new WP_Error( 'profile', 'bad' ), new RuntimeException( 'bad' ) ) as $profile->result ) {
 	expect( null === $provider->describe( new WC_Payment_Gateway() )['provider_data']['merchant_code'], 'describe remains array on unavailable profile' );
 }
-foreach ( array( 'PENDING' => 'in_progress', 'SUCCESSFUL' => 'completed', 'FAILED' => 'failed', 'CANCELLED' => 'cancelled', 'other' => 'pending' ) as $status => $expected ) {
+foreach ( array( 'PENDING' => 'in_progress', 'SUCCESSFUL' => 'completed', 'FAILED' => 'cancelled', 'CANCELLED' => 'cancelled', 'other' => 'pending' ) as $status => $expected ) {
 	$transactions->result = server_transaction( $status );
 	$result = $provider->fetch( 'reader:client:123' );
 	expect( $expected === $result['status'], $status );
-	if ( 'FAILED' === $status ) { expect( 'provider_error' === $result['failure_reason'], 'failure reason' ); }
+	if ( 'FAILED' === $status ) { expect( ! isset( $result['failure_reason'] ), 'SumUp gives no decline reason; the till decides voided vs cancelled' ); }
 }
 foreach ( array( false, array(), array( 'items' => array() ) ) as $missing ) { expect( 'pending' === Provider::normalize( $missing )['status'], 'missing observation' ); }
 $transactions->result = server_transaction();

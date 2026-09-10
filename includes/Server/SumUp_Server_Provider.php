@@ -183,10 +183,13 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 */
 	public static function normalize( $transaction ): array {
 		$transaction = is_array( $transaction ) ? $transaction : array();
+		// SumUp reports a terminated checkout and a declined card identically (FAILED, no reason),
+		// so both become `cancelled`: Pro's Status_Map turns that into `voided` when the till asked
+		// for the cancel and into a cancelled failure otherwise, which is what the device showed.
 		$states = array(
 			'PENDING' => 'in_progress',
 			'SUCCESSFUL' => 'completed',
-			'FAILED' => 'failed',
+			'FAILED' => 'cancelled',
 			'CANCELLED' => 'cancelled',
 		);
 		$currency = ! empty( $transaction['currency'] ) ? strtoupper( $transaction['currency'] ) : null;
@@ -212,8 +215,6 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				}
 			),
 		);
-		if ( 'failed' === $result['status'] ) {
-			$result['failure_reason'] = 'provider_error'; }
 		return $result;
 	}
 

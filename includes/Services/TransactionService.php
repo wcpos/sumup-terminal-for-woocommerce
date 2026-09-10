@@ -8,6 +8,8 @@
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Services;
 
+use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
+
 /**
  * Retrieves SumUp transaction results by client transaction ID.
  */
@@ -71,6 +73,7 @@ class TransactionService extends HttpClient {
 			)
 		);
 		if ( is_wp_error( $response ) ) {
+			Logger::log( 'SumUp transaction lookup transport error: ' . $response->get_error_message() );
 			return $response;
 		}
 		$code = (int) wp_remote_retrieve_response_code( $response );
@@ -79,6 +82,7 @@ class TransactionService extends HttpClient {
 		}
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 		if ( $code < 200 || $code >= 300 || ! is_array( $body ) ) {
+			Logger::log( sprintf( 'SumUp transaction lookup failed (HTTP %d): %s', $code, substr( (string) wp_remote_retrieve_body( $response ), 0, 200 ) ) );
 			return new \WP_Error( 'sumup_api_error', sprintf( 'SumUp transaction lookup failed (HTTP %d).', $code ), array( 'status' => $code ) );
 		}
 		return $body;
