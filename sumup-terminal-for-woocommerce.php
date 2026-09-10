@@ -102,3 +102,4 @@ function init(): void {
 add_action( 'plugins_loaded', __NAMESPACE__ . '\init', 11 );
 
 add_action( 'plugins_loaded', array( Server\Registration::class, 'register' ), 30 );
+add_action( 'plugins_loaded', array( Server\Pos_Reader_Settings::class, 'migrate_once' ), 30 );
