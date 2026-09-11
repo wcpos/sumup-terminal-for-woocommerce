@@ -30,8 +30,16 @@ class Settings {
 
 	/** Read the POS mode, preserving cloud checkout for a configured default reader. */
 	public static function get_wcpos_connection(): string {
+		if ( ! self::device_mode_available() ) {
+			return 'server';
+		}
 		$settings = self::get_gateway_settings();
 		return $settings['wcpos_connection'] ?? ( ! empty( $settings['default_reader'] ) ? 'server' : 'device' );
+	}
+
+	/** Whether the installed WCPOS Pro carries the device-provider contract this adapter needs. */
+	public static function device_mode_available(): bool {
+		return \function_exists( 'wcpos_pro_register_device_provider' );
 	}
 
 	/**

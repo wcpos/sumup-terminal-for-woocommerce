@@ -145,15 +145,18 @@ class Gateway extends WC_Payment_Gateway {
 			'affiliate_key' => array(
 				'title' => __( 'Affiliate Key', 'sumup-terminal-for-woocommerce' ),
 				'type' => 'password',
-				'description' => __( 'For POS server checkout, enter the matching key from <a href="https://developer.sumup.com/tools/authorization/affiliate-keys/">SumUp Affiliate Keys</a>.', 'sumup-terminal-for-woocommerce' ),
+				'description' => __( 'Required for Bluetooth readers (the POS app starts SumUp\'s SDK with it); optional for Solo over the cloud. Enter the matching key from <a href="https://developer.sumup.com/tools/authorization/affiliate-keys/">SumUp Affiliate Keys</a>.', 'sumup-terminal-for-woocommerce' ),
 				'default' => '',
 			),
 			'wcpos_connection' => array(
 				'title' => __( 'POS connection', 'sumup-terminal-for-woocommerce' ),
 				'type' => 'select',
-				'options' => array(
-					'device' => __( 'Bluetooth reader (the POS app drives the reader: Solo Lite, Solo, Air)', 'sumup-terminal-for-woocommerce' ),
-					'server' => __( 'Solo over the cloud (the store drives the reader)', 'sumup-terminal-for-woocommerce' ),
+				// The Bluetooth option needs Pro's device contract; an older Pro only offers the cloud path.
+				'options' => array_filter(
+					array(
+						'device' => Settings::device_mode_available() ? __( 'Bluetooth reader (the POS app drives the reader: Solo Lite, Solo, Air)', 'sumup-terminal-for-woocommerce' ) : null,
+						'server' => __( 'Solo over the cloud (the store drives the reader)', 'sumup-terminal-for-woocommerce' ),
+					)
 				),
 				'default' => Settings::get_wcpos_connection(),
 				'description' => __( 'Choose whether the POS app connects by Bluetooth or the store connects to a Solo over the cloud.', 'sumup-terminal-for-woocommerce' ),
