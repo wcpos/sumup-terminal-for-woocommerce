@@ -148,6 +148,16 @@ class Gateway extends WC_Payment_Gateway {
 				'description' => __( 'For POS server checkout, enter the matching key from <a href="https://developer.sumup.com/tools/authorization/affiliate-keys/">SumUp Affiliate Keys</a>.', 'sumup-terminal-for-woocommerce' ),
 				'default' => '',
 			),
+			'wcpos_connection' => array(
+				'title' => __( 'POS connection', 'sumup-terminal-for-woocommerce' ),
+				'type' => 'select',
+				'options' => array(
+					'device' => __( 'Bluetooth reader (the POS app drives the reader: Solo Lite, Solo, Air)', 'sumup-terminal-for-woocommerce' ),
+					'server' => __( 'Solo over the cloud (the store drives the reader)', 'sumup-terminal-for-woocommerce' ),
+				),
+				'default' => Settings::get_wcpos_connection(),
+				'description' => __( 'Choose whether the POS app connects by Bluetooth or the store connects to a Solo over the cloud.', 'sumup-terminal-for-woocommerce' ),
+			),
 			'default_reader' => $this->default_terminal_field(),
 			'allowed_readers' => $this->enabled_terminals_field(),
 			'lock_to_default' => array(

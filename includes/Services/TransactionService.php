@@ -41,13 +41,6 @@ class TransactionService extends HttpClient {
 	}
 
 	/**
-	 * Retrieve a transaction by the client ID returned by reader checkout.
-	 *
-	 * @param string $client_transaction_id Client transaction ID.
-	 *
-	 * @return array|false Transaction data or false when unavailable.
-	 */
-	/**
 	 * Look a transaction up for the server checkout, distinguishing "nothing yet" from failure.
 	 *
 	 * SumUp answers HTTP 404 while no transaction exists for a checkout (nobody has acted on
@@ -57,7 +50,28 @@ class TransactionService extends HttpClient {
 	 * @return array|null|\WP_Error Transaction, null when SumUp has none yet, or an error.
 	 */
 	public function find_by_client_transaction_id( string $client_transaction_id ) {
-		if ( '' === $client_transaction_id || ! $this->has_api_key() || ! $this->profile_service ) {
+		return $this->find_by_transaction_id( 'client_transaction_id', $client_transaction_id );
+	}
+
+	/**
+	 * Look up the foreign ID supplied to the native SDK; 404 means nothing yet.
+	 *
+	 * @param string $foreign_transaction_id POS payment ID.
+	 * @return array|null|\WP_Error Transaction, empty observation, or error.
+	 */
+	public function find_by_foreign_transaction_id( string $foreign_transaction_id ) {
+		return $this->find_by_transaction_id( 'foreign_transaction_id', $foreign_transaction_id );
+	}
+
+	/**
+	 * Share HTTP classification between the cloud and SDK correlation IDs.
+	 *
+	 * @param string $field Transaction ID query parameter.
+	 * @param string $id Transaction ID value.
+	 * @return array|null|\WP_Error Transaction, empty observation, or error.
+	 */
+	private function find_by_transaction_id( string $field, string $id ) {
+		if ( '' === $id || ! $this->has_api_key() || ! $this->profile_service ) {
 			return new \WP_Error( 'sumup_api_error', 'SumUp transaction lookup is not configured.' );
 		}
 		$merchant_code = $this->profile_service->get_merchant_code();
@@ -65,7 +79,7 @@ class TransactionService extends HttpClient {
 			return new \WP_Error( 'sumup_api_error', 'SumUp merchant code is unavailable.' );
 		}
 		$response = wp_remote_request(
-			$this->base_url . '/v2.1/merchants/' . rawurlencode( $merchant_code ) . '/transactions?client_transaction_id=' . rawurlencode( $client_transaction_id ),
+			$this->base_url . '/v2.1/merchants/' . rawurlencode( $merchant_code ) . '/transactions?' . $field . '=' . rawurlencode( $id ),
 			array(
 				'method' => 'GET',
 				'headers' => $this->get_headers(),

@@ -23,6 +23,7 @@ class ServerProfile extends ProfileService {
 class ServerTransactions extends TransactionService {
 	public $result = array();
 	public $ids = array();
+	public function find_by_foreign_transaction_id( string $id ) { $this->ids[] = $id; return server_result( $this->result ); }
 	public function get_by_client_transaction_id( $id ) { $this->ids[] = $id; return server_result( $this->result ); }
 	public function find_by_client_transaction_id( string $id ) { $this->ids[] = $id; $r = server_result( $this->result ); return false === $r ? new WP_Error( 'sumup_api_error', 'SumUp API request failed.' ) : $r; }
 }

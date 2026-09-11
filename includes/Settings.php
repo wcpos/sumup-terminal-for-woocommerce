@@ -19,13 +19,19 @@ class Settings {
 		return (string) ( self::get_gateway_settings()['api_key'] ?? '' );
 	}
 
-	/** Read the optional affiliate credentials used only by server checkout. */
+	/** Read the affiliate credentials shared by POS checkout modes. */
 	public static function affiliate(): array {
 		$settings = self::get_gateway_settings();
 		return array(
 			'app_id' => (string) ( $settings['affiliate_app_id'] ?? '' ),
 			'key' => (string) ( $settings['affiliate_key'] ?? '' ),
 		);
+	}
+
+	/** Read the POS mode, preserving cloud checkout for a configured default reader. */
+	public static function get_wcpos_connection(): string {
+		$settings = self::get_gateway_settings();
+		return $settings['wcpos_connection'] ?? ( ! empty( $settings['default_reader'] ) ? 'server' : 'device' );
 	}
 
 	/**
