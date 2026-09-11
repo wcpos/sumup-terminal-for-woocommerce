@@ -1,5 +1,9 @@
 <?php
+// phpcs:ignoreFile -- Standalone doubles mirror WordPress and Pro names, not plugin globals.
 namespace {
+	if ( ! function_exists( 'wcpos_pro_register_device_provider' ) && empty( $GLOBALS['without_device_contract'] ) ) {
+		function wcpos_pro_register_device_provider( string $gateway_id, string $adapter_class ): void { $GLOBALS['device_registered'][] = array( $gateway_id, $adapter_class ); }
+	}
 	if ( ! class_exists( 'WP_Error' ) ) {
 		class WP_Error {
 			private $code;
@@ -79,5 +83,18 @@ namespace WCPOS\WooCommercePOSPro\Payments\Server {
 		private static function exponent( string $currency ): int { return array( 'JPY' => 0, 'HUF' => 0, 'KWD' => 3 )[ strtoupper( $currency ) ] ?? 2; }
 		public static function minor( string $amount, string $currency ): int { return (int) round( (float) $amount * ( 10 ** self::exponent( $currency ) ) ); }
 		public static function major( int $minor, string $currency ): string { return number_format( $minor / ( 10 ** self::exponent( $currency ) ), self::exponent( $currency ), '.', '' ); }
+	}
+}
+
+namespace WCPOS\WooCommercePOSPro\Payments\Device {
+	abstract class Abstract_Device_Provider_Adapter {
+		abstract public function provider(): string;
+		abstract public function describe( \WC_Payment_Gateway $gateway ): array;
+		abstract public function bootstrap( \WC_Payment_Gateway $gateway, array $context );
+		abstract public function create_intent( array $row, array $context );
+		abstract public function fetch( string $ref );
+		abstract public function cancel( string $ref );
+		abstract public function refund( array $row, int $refund_id, string $amount );
+		public function capture( string $ref ) { return new \WP_Error( 'wcpos_capture_mode_unsupported', 'This payment provider does not support that operation.', array( 'status' => 501 ) ); }
 	}
 }

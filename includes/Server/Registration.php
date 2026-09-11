@@ -31,6 +31,9 @@ final class Registration {
 		}
 		if ( ! self::$registered ) {
 			wcpos_pro_register_server_provider( Settings::GATEWAY_ID, SumUp_Server_Provider::class );
+			if ( 'device' === Settings::get_wcpos_connection() && function_exists( 'wcpos_pro_register_device_provider' ) ) {
+				wcpos_pro_register_device_provider( Settings::GATEWAY_ID, SumUp_Device_Provider::class );
+			}
 			self::$registered = true;
 		}
 		return true;
