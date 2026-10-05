@@ -37,6 +37,9 @@ class ServerReaders extends WordPressHttpReaderApiClient {
 	public function get_all() { return server_result( $this->result ); }
 	public function checkout( $id, $payload ) { $this->checkouts[] = array( $id, $payload ); $this->last_error = $this->checkout_error; return server_result( $this->checkout_result ); }
 	public function cancel_checkout( $id ) { $this->cancels[] = $id; return server_result( $this->cancel_result ); }
+	public $status_result = false;
+	public $status_calls = array();
+	public function get_status( $id ) { $this->status_calls[] = $id; return server_result( $this->status_result ); }
 }
 function server_result( $value ) { if ( $value instanceof Throwable ) { throw $value; } return $value; }
 function server_fixture() {

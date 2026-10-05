@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Server;
 
+use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
 use WCPOS\WooCommercePOS\SumUpTerminal\Settings;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
@@ -16,6 +17,13 @@ use WCPOS\WooCommercePOSPro\Payments\Server\Money_Units;
 
 /** Solo provider, independent of the legacy order-pay flow. */
 class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abstract_Provider_Adapter {
+	/**
+	 * How long after our terminate an empty transaction lookup is trusted as "cancelled".
+	 * Long enough for a tap that raced the terminate to become a transaction SumUp lists;
+	 * short enough that the cashier sees the cancel confirmed, not the five-minute deadline.
+	 */
+	public const TERMINATE_GRACE_SECONDS = 10;
+
 	/** Merchant profile.
 	 *
 	 * @var ProfileService
@@ -162,6 +170,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( empty( $result['data']['client_transaction_id'] ) ) {
 					return self::error( 'SumUp checkout did not return a client transaction ID.' );
 				}
+				// When the reader later reports itself idle, fetch() needs to know the checkout
+				// predates that idleness (see fetch()).
+				self::remember( 'checkout', $result['data']['client_transaction_id'] );
 				return array(
 					'ref' => $reader_id . ':' . $result['data']['client_transaction_id'],
 					'expires_at' => null,
@@ -178,10 +189,104 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	public function fetch( string $ref ) {
 		return $this->call(
 			function () use ( $ref ) {
-				$transaction = $this->lookup( explode( ':', $ref, 2 )[1] ?? '' );
-				return is_wp_error( $transaction ) ? $transaction : self::normalize( $transaction );
+				list( $reader_id, $client_id ) = array_pad( explode( ':', $ref, 2 ), 2, '' );
+				$transaction = $this->lookup( $client_id );
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				$observation = self::normalize( $transaction );
+				// SumUp records no transaction for a checkout nobody paid: a physical Solo that
+				// was terminated from the till, or that gave up on its own after about a minute,
+				// leaves the lookup empty for good, and the till would spin until the five-minute
+				// deadline (first physical run, 2026-10-05). The evidence that it is over is the
+				// authenticated reader status: the reader reports itself IDLE with a last_activity
+				// after the checkout began (or after our terminate). Only an EMPTY lookup qualifies
+				// — any transaction, in any state, is the customer's and wins — and only after a
+				// grace period, so a tap that raced the end has time to become a transaction.
+				if ( array() === $transaction && $this->reader_finished( $reader_id, $client_id ) ) {
+					$observation['status'] = 'cancelled';
+					// Nobody paid and nobody pressed cancel on the device (that leaves a FAILED
+					// transaction): the reader timed out. The till ignores the reason when it asked
+					// for the cancel itself (that row is voided), so this only ever names a timeout.
+					$observation['failure_reason'] = 'expired';
+				}
+				return $observation;
 			}
 		);
+	}
+
+	/**
+	 * Remember that the store asked SumUp to terminate this checkout.
+	 *
+	 * Only our own terminate counts: an unsigned `failed` delivery must never end a payment,
+	 * because a late SUCCESSFUL after a failed row is ignored and the money would be lost.
+	 *
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function remember_terminated( string $client_id ): void {
+		self::remember( 'terminated', $client_id );
+	}
+
+	/**
+	 * Remember when this checkout began, or when the store terminated it.
+	 *
+	 * @param string $what      `checkout` or `terminated`.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function remember( string $what, string $client_id ): void {
+		if ( '' === $client_id ) {
+			return;
+		}
+		if ( ! set_transient( self::marker_key( $what, $client_id ), time(), 15 * MINUTE_IN_SECONDS ) ) {
+			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
+			// these markers existed: slower for the cashier, never wrong about money.
+			Logger::log( "SumUp $what marker for $client_id could not be written; the cancel confirms at the deadline." );
+		}
+	}
+
+	/**
+	 * Whether the reader has finished with this checkout without a transaction: the checkout (or
+	 * our terminate) is older than the grace period, and the authenticated reader status says the
+	 * device is IDLE with activity since then. A reader still showing the amount, a status call
+	 * that fails, or activity older than the checkout all mean "still waiting".
+	 *
+	 * @param string $reader_id SumUp reader ID.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private function reader_finished( string $reader_id, string $client_id ): bool {
+		if ( '' === $reader_id || '' === $client_id ) {
+			return false;
+		}
+		$started = get_transient( self::marker_key( 'checkout', $client_id ) );
+		$terminated = get_transient( self::marker_key( 'terminated', $client_id ) );
+		if ( false === $started && false === $terminated ) {
+			return false;
+		}
+		// The grace runs from the latest thing that happened; the reader's activity is measured
+		// from the checkout's start, because terminating a checkout the reader already dropped
+		// (its own timeout) produces no new activity on the device.
+		$latest = max( (int) $started, (int) $terminated );
+		$since  = false !== $started ? (int) $started : (int) $terminated;
+		if ( time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
+			return false;
+		}
+		$status = $this->readers->get_status( $reader_id );
+		if ( ! is_array( $status ) ) {
+			return false;
+		}
+		$state    = $status['data']['state'] ?? $status['state'] ?? '';
+		$activity = strtotime( (string) ( $status['data']['last_activity'] ?? $status['last_activity'] ?? '' ) );
+		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= $since;
+	}
+
+	/**
+	 * Transient key for a checkout marker.
+	 *
+	 * @param string $what      `checkout` or `terminated`.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function marker_key( string $what, string $client_id ): string {
+		return 'sutwc_' . $what . '_' . md5( $client_id );
 	}
 
 	/**
@@ -252,7 +357,12 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				}
 				$result = $this->readers->cancel_checkout( $parts[0] );
 				// Terminate is asynchronous; acceptance never proves that money was not taken.
-				return false === $result || is_wp_error( $result ) ? self::error( $result ) : 'requested';
+				if ( false === $result || is_wp_error( $result ) ) {
+					return self::error( $result );
+				}
+				// The next poll confirms the cancel when SumUp still has no transaction (see fetch()).
+				self::remember_terminated( $parts[1] ?? '' );
+				return 'requested';
 			}
 		);
 	}

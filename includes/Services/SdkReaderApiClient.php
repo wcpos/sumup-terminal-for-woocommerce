@@ -234,8 +234,9 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		);
 	}
 
+	/** Same key shape as the HTTP client (`last_activity`, not `lastActivity`): callers read one. */
 	private function normalize_status( $status ) {
-		return json_decode( wp_json_encode( $status ), true );
+		return $this->snake_case_array_keys( json_decode( wp_json_encode( $status ), true ) );
 	}
 
 	private function normalize_checkout_response( $response ) {

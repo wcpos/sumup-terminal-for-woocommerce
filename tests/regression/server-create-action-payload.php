@@ -15,6 +15,7 @@ foreach ( array( array( 'eur', '12.30', 1230, 2 ), array( 'jpy', '123', 123, 0 )
 	$row = server_row(); $row['currency'] = $case[0]; $row['amount'] = $case[1];
 	$result = $provider->create_reader_action( $row, 'reader' );
 	expect( array( 'ref' => 'reader:client:123', 'expires_at' => null ) === $result, 'composite action reference' );
+	expect( isset( $GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'client:123' ) ] ), 'checkout start remembered for the reader-idle check' );
 	$payload = end( $readers->checkouts )[1];
 	expect( array( 'value' => $case[2], 'currency' => strtoupper( $case[0] ), 'minor_unit' => $case[3] ) === $payload['total_amount'], 'row money, not order total' );
 	expect( 'Order #WEB-12' === $payload['description'], 'order number description' );
