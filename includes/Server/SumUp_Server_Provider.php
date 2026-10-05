@@ -241,7 +241,8 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		if ( '' === $client_id ) {
 			return;
 		}
-		if ( ! set_transient( self::marker_key( $what, $client_id ), time(), 15 * MINUTE_IN_SECONDS ) ) {
+		// Sub-second, so a delivery and a terminate in the same second keep their order.
+		if ( ! set_transient( self::marker_key( $what, $client_id ), microtime( true ), 15 * MINUTE_IN_SECONDS ) ) {
 			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
 			// these markers existed: slower for the cashier, never wrong about money.
 			Logger::log( "SumUp $what marker for $client_id could not be written; the cancel confirms at the deadline." );
@@ -278,7 +279,7 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		$latest = max( (int) $started, (int) $terminated );
 		$since  = false !== $started ? (int) $started : (int) $terminated;
 		$seen   = get_transient( self::marker_key( 'webhook', $client_id ) );
-		$reported = false !== $terminated && false !== $seen && (int) $seen >= (int) $terminated;
+		$reported = false !== $terminated && false !== $seen && (float) $seen > (float) $terminated;
 		if ( ! $reported && time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
 			return false;
 		}

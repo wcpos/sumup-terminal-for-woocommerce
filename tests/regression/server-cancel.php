@@ -36,9 +36,18 @@ expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array
 // SumUp's delivery for this checkout, arriving after our terminate, waives the grace: the reader has
 // processed the terminate, so the authenticated status is asked at once — and still decides alone.
 $seen = 'sutwc_webhook_' . md5( 'client:123' );
+expect( is_float( $GLOBALS['transients'][ $key ] ), 'markers are sub-second so same-second order is kept' );
 $GLOBALS['transients'][ $seen ] = $GLOBALS['transients'][ $key ] - 1;
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'a delivery from before the terminate waives nothing' );
-$GLOBALS['transients'][ $seen ] = time();
+$GLOBALS['transients'][ $seen ] = $GLOBALS['transients'][ $key ] - 0.001;
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'a delivery a millisecond before the terminate, same second, waives nothing' );
+$GLOBALS['transients'][ $seen ] = $GLOBALS['transients'][ $key ];
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'an indistinguishable instant waives nothing' );
+$GLOBALS['transients'][ $seen ] = $GLOBALS['transients'][ $key ] + 0.001;
+$readers->status_result = $idle( 0 );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'] && array( 'reader' ) === $readers->status_calls, 'a delivery a millisecond after the terminate waives the grace' );
+$readers->status_calls = array();
+$GLOBALS['transients'][ $seen ] = microtime( true );
 $readers->status_result = array( 'data' => array( 'state' => 'PROCESSING', 'last_activity' => gmdate( 'Y-m-d\TH:i:s\Z' ) ) );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array( 'reader' ) === $readers->status_calls, 'delivery after the terminate, reader still busy: asked at once, still waiting' );
 $readers->status_result = $idle( 0 );
