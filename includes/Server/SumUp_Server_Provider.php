@@ -21,6 +21,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 * How long after our terminate an empty transaction lookup is trusted as "cancelled".
 	 * Long enough for a tap that raced the terminate to become a transaction SumUp lists;
 	 * short enough that the cashier sees the cancel confirmed, not the five-minute deadline.
+	 * Waived once SumUp's own delivery saying the checkout ended without money (`failed` or
+	 * `cancelled`) has arrived after the terminate (`reader_finished()`): the reader has then
+	 * demonstrably dropped it, and the cashier sees the cancel confirmed on the next poll,
+	 * about three seconds after the tap.
 	 */
 	public const TERMINATE_GRACE_SECONDS = 10;
 
@@ -228,16 +232,18 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	}
 
 	/**
-	 * Remember when this checkout began, or when the store terminated it.
+	 * Remember when this checkout began, when the store terminated it, or when SumUp delivered
+	 * that it ended without money.
 	 *
-	 * @param string $what      `checkout` or `terminated`.
+	 * @param string $what      `checkout`, `terminated` or `ended`.
 	 * @param string $client_id SumUp client transaction ID.
 	 */
 	private static function remember( string $what, string $client_id ): void {
 		if ( '' === $client_id ) {
 			return;
 		}
-		if ( ! set_transient( self::marker_key( $what, $client_id ), time(), 15 * MINUTE_IN_SECONDS ) ) {
+		// Sub-second, so a delivery and a terminate in the same second keep their order.
+		if ( ! set_transient( self::marker_key( $what, $client_id ), microtime( true ), 15 * MINUTE_IN_SECONDS ) ) {
 			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
 			// these markers existed: slower for the cashier, never wrong about money.
 			Logger::log( "SumUp $what marker for $client_id could not be written; the cancel confirms at the deadline." );
@@ -249,6 +255,13 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 * our terminate) is older than the grace period, and the authenticated reader status says the
 	 * device is IDLE with activity since then. A reader still showing the amount, a status call
 	 * that fails, or activity older than the checkout all mean "still waiting".
+	 *
+	 * The grace covers a tap that raced the terminate: the reader goes IDLE having taken the money,
+	 * and SumUp lists the transaction a moment later. A SumUp delivery for this checkout saying it
+	 * ended without money (`failed`/`cancelled`), arriving after our terminate, closes that race —
+	 * a successful or unknown delivery never writes the marker — so the grace is skipped and only
+	 * the reader status decides. The delivery is unsigned, which is why it never decides the
+	 * outcome itself — it only brings the authenticated check forward.
 	 *
 	 * @param string $reader_id SumUp reader ID.
 	 * @param string $client_id SumUp client transaction ID.
@@ -267,7 +280,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		// (its own timeout) produces no new activity on the device.
 		$latest = max( (int) $started, (int) $terminated );
 		$since  = false !== $started ? (int) $started : (int) $terminated;
-		if ( time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
+		$ended  = get_transient( self::marker_key( 'ended', $client_id ) );
+		$reported = false !== $terminated && false !== $ended && (float) $ended > (float) $terminated;
+		if ( ! $reported && time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
 			return false;
 		}
 		$status = $this->readers->get_status( $reader_id );
@@ -282,7 +297,7 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	/**
 	 * Transient key for a checkout marker.
 	 *
-	 * @param string $what      `checkout` or `terminated`.
+	 * @param string $what      `checkout`, `terminated` or `ended`.
 	 * @param string $client_id SumUp client transaction ID.
 	 */
 	private static function marker_key( string $what, string $client_id ): string {
@@ -428,6 +443,12 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				$client_id = $event['payload']['client_transaction_id'] ?? '';
 				if ( ! is_string( $client_id ) || '' === $client_id ) {
 					return new \WP_Error( 'sumup_webhook_invalid', 'Missing client transaction ID.', array( 'status' => 400 ) );
+				}
+				// SumUp says the checkout ended without money: the poll may confirm our terminate at
+				// once. A successful (or unknown) delivery must not — SumUp may not list the
+				// transaction yet, and an IDLE reader would read as cancelled while the money moved.
+				if ( in_array( strtolower( (string) ( $event['payload']['status'] ?? '' ) ), array( 'failed', 'cancelled' ), true ) ) {
+					self::remember( 'ended', $client_id );
 				}
 				// The authenticated lookup, never the unsigned body, is the money evidence.
 				$transaction = $this->lookup( $client_id );
