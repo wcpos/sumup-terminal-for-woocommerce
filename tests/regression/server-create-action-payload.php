@@ -33,6 +33,18 @@ foreach ( array( array( '', 'key' ), array( 'app', '' ), array( 'app', 'key' ) )
 foreach ( array( array(), false, new WP_Error( 'busy', 'Busy' ), new RuntimeException( 'bad' ) ) as $readers->checkout_result ) {
 	provider_error_expect( $provider->create_reader_action( server_row(), 'reader' ), is_wp_error( $readers->checkout_result ) ? 'busy' : 'sumup_api_error' );
 }
+// SumUp refusing the checkout (the live run's 422 for a GBP row on an EUR merchant): the till gets
+// SumUp's words and the 4xx, so it stops instead of retrying as a dropped connection.
+$readers->checkout_result = false;
+$readers->checkout_error = new WP_Error( 'sumup_http_422', "this merchant can only accept 'EUR'", array( 'status' => 422 ) );
+$refused = $provider->create_reader_action( server_row(), 'reader' );
+expect( is_wp_error( $refused ) && 'wcpos_provider_error' === $refused->get_error_code(), 'refusal is a provider error' );
+expect( 422 === $refused->get_error_data()['status'], 'refusal keeps SumUp 4xx status' );
+expect( "this merchant can only accept 'EUR'" === $refused->get_error_message() && 'sumup_http_422' === $refused->get_error_data()['detail']['code'], 'refusal carries SumUp words' );
+$readers->checkout_error = new WP_Error( 'sumup_http_503', 'Service unavailable', array( 'status' => 503 ) );
+expect( 502 === $provider->create_reader_action( server_row(), 'reader' )->get_error_data()['status'], 'an outage stays transport' );
+$readers->checkout_error = null;
+$readers->checkout_result = array( 'data' => array( 'client_transaction_id' => 'client:123' ) );
 unset( $orders[12] );
 $error = $provider->create_reader_action( server_row(), 'reader' );
 expect( 'wcpos_order_not_found' === $error->get_error_code() && 404 === $error->get_error_data()['status'], 'missing order' );

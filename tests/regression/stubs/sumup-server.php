@@ -30,11 +30,12 @@ class ServerTransactions extends TransactionService {
 class ServerReaders extends WordPressHttpReaderApiClient {
 	public $result = array();
 	public $checkout_result = array( 'data' => array( 'client_transaction_id' => 'client:123' ) );
+	public $checkout_error = null;
 	public $cancel_result = true;
 	public $checkouts = array();
 	public $cancels = array();
 	public function get_all() { return server_result( $this->result ); }
-	public function checkout( $id, $payload ) { $this->checkouts[] = array( $id, $payload ); return server_result( $this->checkout_result ); }
+	public function checkout( $id, $payload ) { $this->checkouts[] = array( $id, $payload ); $this->last_error = $this->checkout_error; return server_result( $this->checkout_result ); }
 	public function cancel_checkout( $id ) { $this->cancels[] = $id; return server_result( $this->cancel_result ); }
 }
 function server_result( $value ) { if ( $value instanceof Throwable ) { throw $value; } return $value; }

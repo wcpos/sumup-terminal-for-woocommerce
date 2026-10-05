@@ -41,6 +41,11 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		return ! empty( $this->api_key );
 	}
 
+	/** The SDK's failure is logged and the same request is retried over HTTP, so that answer is the one to report. */
+	public function last_error() {
+		return $this->fallback->last_error();
+	}
+
 	public function get_all() {
 		$merchant_id = $this->ensure_merchant_id();
 		if ( ! $merchant_id ) {

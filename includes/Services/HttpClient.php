@@ -33,6 +33,16 @@ class HttpClient {
 	protected $merchant_id;
 
 	/**
+	 * Why the last request failed.
+	 *
+	 * Callers return `false` to the POS and still owe the cashier the reason SumUp gave; the
+	 * HTTP status is kept in the error data so a 4xx can be told from an outage.
+	 *
+	 * @var null|\WP_Error
+	 */
+	protected $last_error = null;
+
+	/**
 	 * Constructor for the HTTP client.
 	 *
 	 * @param string $api_key     The SumUp API key.
@@ -200,10 +210,12 @@ class HttpClient {
 	 * @return array|false Response data or false on failure.
 	 */
 	private function make_request( $url, $args, $method, $endpoint, $data = array() ) {
-		$response = wp_remote_request( $url, $args );
+		$this->last_error = null;
+		$response         = wp_remote_request( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
 			Logger::log( "SumUp API request failed ($method $endpoint): " . $response->get_error_message() );
+			$this->last_error = $response;
 
 			return false;
 		}
@@ -212,22 +224,10 @@ class HttpClient {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( $code < 200 || $code >= 300 ) {
-			$error_details = json_decode( $body, true );
-			$error_message = "SumUp API error (HTTP $code) for $method $endpoint";
-			
-			if ( $error_details && isset( $error_details['message'] ) ) {
-				$error_message .= ": " . $error_details['message'];
-			}
-			
-			if ( $error_details && isset( $error_details['error_description'] ) ) {
-				$error_message .= ": " . $error_details['error_description'];
-			}
-			
-			if ( ! $error_details || ( ! isset( $error_details['message'] ) && ! isset( $error_details['error_description'] ) ) ) {
-				$error_message .= ": " . $body;
-			}
-			
+			$detail        = self::error_detail( $body );
+			$error_message = "SumUp API error (HTTP $code) for $method $endpoint: " . $detail;
 			Logger::log( $error_message );
+			$this->last_error = new \WP_Error( 'sumup_http_' . $code, $detail, array( 'status' => (int) $code ) );
 
 			return false;
 		}
@@ -239,6 +239,47 @@ class HttpClient {
 		$decoded = json_decode( $body, true );
 
 		return null !== $decoded ? $decoded : false;
+	}
+
+	/**
+	 * Why the last request failed, or null when it succeeded.
+	 *
+	 * @return null|\WP_Error
+	 */
+	public function last_error() {
+		return $this->last_error;
+	}
+
+	/**
+	 * The one line SumUp's error body carries. The Readers API answers a refused checkout
+	 * with `{"errors":{"total_amount":["this merchant can only accept 'EUR'"]}}`; the
+	 * OAuth and v0.1 endpoints use `message` or `error_description`. Whatever the shape,
+	 * the cashier gets SumUp's words, not "request failed".
+	 *
+	 * @param string $body Response body.
+	 */
+	private static function error_detail( $body ): string {
+		$details = json_decode( $body, true );
+		if ( ! is_array( $details ) ) {
+			return (string) $body;
+		}
+		$lines = array();
+		foreach ( array( 'message', 'error_description' ) as $key ) {
+			if ( isset( $details[ $key ] ) && is_scalar( $details[ $key ] ) ) {
+				$lines[] = (string) $details[ $key ];
+			}
+		}
+		if ( isset( $details['errors'] ) && is_array( $details['errors'] ) ) {
+			array_walk_recursive(
+				$details['errors'],
+				static function ( $value ) use ( &$lines ) {
+					if ( is_scalar( $value ) ) {
+						$lines[] = (string) $value;
+					}
+				}
+			);
+		}
+		return $lines ? implode( '; ', $lines ) : (string) $body;
 	}
 
 	/**
