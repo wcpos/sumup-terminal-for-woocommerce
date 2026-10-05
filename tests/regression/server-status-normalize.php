@@ -15,7 +15,9 @@ foreach ( array( 'PENDING' => 'in_progress', 'SUCCESSFUL' => 'completed', 'FAILE
 	$transactions->result = server_transaction( $status );
 	$result = $provider->fetch( 'reader:client:123' );
 	expect( $expected === $result['status'], $status );
-	if ( 'FAILED' === $status ) { expect( ! isset( $result['failure_reason'] ), 'SumUp gives no decline reason; the till decides voided vs cancelled' ); }
+	// SumUp reports a declined card and a cancel on the reader both as FAILED; the till keeps
+	// `voided` when it asked for the cancel and otherwise shows this reason, never "cancelled".
+	expect( ( 'FAILED' === $status ? 'declined_or_cancelled' : null ) === $result['failure_reason'], 'FAILED carries declined_or_cancelled; nothing else carries a reason' );
 }
 foreach ( array( false, array(), array( 'items' => array() ) ) as $missing ) { expect( 'pending' === Provider::normalize( $missing )['status'], 'missing observation' ); }
 $transactions->result = server_transaction();

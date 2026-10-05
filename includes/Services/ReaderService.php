@@ -28,6 +28,15 @@ class ReaderService {
 	}
 
 	/**
+	 * Why the last reader call returned false.
+	 *
+	 * @return null|\WP_Error
+	 */
+	public function last_error() {
+		return $this->client->last_error();
+	}
+
+	/**
 	 * Set the profile service for lazy loading merchant ID.
 	 *
 	 * @param ProfileService $profile_service Profile service instance.

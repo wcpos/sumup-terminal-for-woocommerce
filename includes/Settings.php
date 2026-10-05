@@ -28,13 +28,16 @@ class Settings {
 		);
 	}
 
-	/** Read the POS mode, preserving cloud checkout for a configured default reader. */
+	/**
+	 * Read the POS mode. Nothing saved means the cloud: a Solo paired to the store works from
+	 * every till, while Bluetooth needs the native app and leaves a web or desktop till with a
+	 * hidden tile (found on the first physical Solo run, 2026-10-05).
+	 */
 	public static function get_wcpos_connection(): string {
 		if ( ! self::device_mode_available() ) {
 			return 'server';
 		}
-		$settings = self::get_gateway_settings();
-		return $settings['wcpos_connection'] ?? ( ! empty( $settings['default_reader'] ) ? 'server' : 'device' );
+		return self::get_gateway_settings()['wcpos_connection'] ?? 'server';
 	}
 
 	/** Whether the installed WCPOS Pro carries the device-provider contract this adapter needs. */

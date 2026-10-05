@@ -147,7 +147,16 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 					$payload['affiliate'] = $affiliate + array( 'foreign_transaction_id' => $row['id'] );
 				}
 				$result = $this->readers->checkout( $reader_id, $payload );
-				if ( false === $result || is_wp_error( $result ) ) {
+				if ( false === $result ) {
+					// A refused checkout (422: a currency this merchant cannot take) must reach the
+					// till with SumUp's words and its 4xx, so the app stops instead of retrying;
+					// an outage (5xx, no response) stays a 502 the app retries as transport.
+					$last = $this->readers->last_error();
+					$data = $last ? $last->get_error_data() : null;
+					$http = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+					return self::error( $last ?? false, 'sumup_api_error', $http >= 400 && $http < 500 ? $http : 502 );
+				}
+				if ( is_wp_error( $result ) ) {
 					return self::error( $result );
 				}
 				if ( empty( $result['data']['client_transaction_id'] ) ) {
@@ -195,6 +204,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		$currency = ! empty( $transaction['currency'] ) ? strtoupper( $transaction['currency'] ) : null;
 		$result = array(
 			'status' => $states[ $transaction['status'] ?? '' ] ?? 'pending',
+			// FAILED is a declined card OR a cancel on the reader; the till keeps `voided` when it
+			// asked for the cancel, and otherwise reads this reason instead of "cancelled".
+			'failure_reason' => 'FAILED' === ( $transaction['status'] ?? '' ) ? 'declined_or_cancelled' : null,
 			'amount' => isset( $transaction['amount'], $currency ) ? Money_Units::major( Money_Units::minor( (string) $transaction['amount'], $currency ), $currency ) : null,
 			'currency' => $currency,
 			'provider_refs' => array(
@@ -410,9 +422,11 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 *
 	 * @param \WP_Error|\Throwable|string $error Service failure.
 	 * @param string                      $code Local error code.
+	 * @param int                         $status HTTP status for the envelope: 502 is retried by the till as
+	 *                                            transport; a 4xx SumUp answered with is final.
 	 * @return \WP_Error Provider error.
 	 */
-	private static function error( $error, string $code = 'sumup_api_error' ): \WP_Error {
+	private static function error( $error, string $code = 'sumup_api_error', int $status = 502 ): \WP_Error {
 		if ( is_wp_error( $error ) ) {
 			if ( 'wcpos_provider_error' === $error->get_error_code() ) {
 				return $error;
@@ -429,7 +443,7 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 			'wcpos_provider_error',
 			$message,
 			array(
-				'status' => 502,
+				'status' => $status,
 				'detail' => array(
 					'code' => $code,
 					'message' => $message,

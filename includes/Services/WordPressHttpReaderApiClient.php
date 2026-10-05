@@ -102,6 +102,8 @@ class WordPressHttpReaderApiClient extends HttpClient implements ReaderApiClient
 	 * @return array|false Checkout response or false on failure.
 	 */
 	public function checkout( $reader_id, $checkout_data ) {
+		// A false before any request must not leave an earlier request's refusal in last_error().
+		$this->forget_error();
 		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}

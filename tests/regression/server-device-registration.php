@@ -11,10 +11,11 @@ function wcpos_pro_register_server_provider( $gateway, $class ) { $GLOBALS['regi
 expect( method_exists( Settings::class, 'get_wcpos_connection' ), 'connection setting is missing' );
 $registration = new ReflectionProperty( Registration::class, 'registered' );
 if ( PHP_VERSION_ID < 80100 ) { $registration->setAccessible( true ); }
-foreach ( array( array( array(), 'device' ), array( array( 'default_reader' => 'solo' ), 'server' ), array( array( 'default_reader' => '' ), 'device' ), array( array( 'wcpos_connection' => 'device', 'default_reader' => 'solo' ), 'device' ), array( array( 'wcpos_connection' => 'server' ), 'server' ) ) as $case ) {
+// Nothing saved means the cloud: Bluetooth hides the tile on a web or desktop till (first physical Solo run, 2026-10-05).
+foreach ( array( array( array(), 'server' ), array( array( 'default_reader' => 'solo' ), 'server' ), array( array( 'default_reader' => '' ), 'server' ), array( array( 'wcpos_connection' => 'device', 'default_reader' => 'solo' ), 'device' ), array( array( 'wcpos_connection' => 'device' ), 'device' ), array( array( 'wcpos_connection' => 'server' ), 'server' ) ) as $case ) {
 	$options['woocommerce_' . Settings::GATEWAY_ID . '_settings'] = $case[0];
 	$before = $options;
-	expect( $case[1] === Settings::get_wcpos_connection(), 'explicit choice overrides default; default reader preserves server mode' );
+	expect( $case[1] === Settings::get_wcpos_connection(), 'explicit choice wins; nothing saved is the cloud' );
 	list( $gateway ) = settings_gateway();
 	$field = $gateway->form_fields['wcpos_connection'];
 	expect( 'select' === $field['type'] && 'POS connection' === $field['title'] && $case[1] === $field['default'], 'connection field uses same default as registration' );
