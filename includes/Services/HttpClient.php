@@ -224,7 +224,7 @@ class HttpClient {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( $code < 200 || $code >= 300 ) {
-			$detail        = self::error_detail( $body );
+			$detail        = self::error_detail( $body, (int) $code );
 			$error_message = "SumUp API error (HTTP $code) for $method $endpoint: " . $detail;
 			Logger::log( $error_message );
 			$this->last_error = new \WP_Error( 'sumup_http_' . $code, $detail, array( 'status' => (int) $code ) );
@@ -251,17 +251,26 @@ class HttpClient {
 	}
 
 	/**
+	 * Clear the recorded failure before a call that may return false without making a request
+	 * (no merchant id yet), so a caller never reads an earlier request's error as this one's.
+	 */
+	public function forget_error(): void {
+		$this->last_error = null;
+	}
+
+	/**
 	 * The one line SumUp's error body carries. The Readers API answers a refused checkout
 	 * with `{"errors":{"total_amount":["this merchant can only accept 'EUR'"]}}`; the
 	 * OAuth and v0.1 endpoints use `message` or `error_description`. Whatever the shape,
 	 * the cashier gets SumUp's words, not "request failed".
 	 *
 	 * @param string $body Response body.
+	 * @param int    $code HTTP status, named when the body says nothing.
 	 */
-	private static function error_detail( $body ): string {
+	private static function error_detail( $body, int $code ): string {
 		$details = json_decode( $body, true );
 		if ( ! is_array( $details ) ) {
-			return (string) $body;
+			return '' !== trim( (string) $body ) ? (string) $body : "HTTP $code";
 		}
 		$lines = array();
 		foreach ( array( 'message', 'error_description' ) as $key ) {
@@ -279,7 +288,7 @@ class HttpClient {
 				}
 			);
 		}
-		return $lines ? implode( '; ', $lines ) : (string) $body;
+		return $lines ? implode( '; ', $lines ) : ( '' !== trim( (string) $body ) ? (string) $body : "HTTP $code" );
 	}
 
 	/**

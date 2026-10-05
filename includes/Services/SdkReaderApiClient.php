@@ -120,6 +120,9 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 	}
 
 	public function checkout( $reader_id, $checkout_data ) {
+		// last_error() reports the fallback's answer; a false returned before any request is
+		// made must not leave an earlier request's refusal there for the provider to read.
+		$this->fallback->forget_error();
 		$merchant_id = $this->ensure_merchant_id();
 		if ( ! $merchant_id ) {
 			return false;
