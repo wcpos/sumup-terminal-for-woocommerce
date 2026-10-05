@@ -19,32 +19,47 @@ foreach ( array( false, new WP_Error( 'timeout', 'Timed out' ), new RuntimeExcep
 $transactions->result = false; $readers->cancels = array();
 provider_error_expect( $provider->cancel( 'reader:client:123' ) );
 expect( array() === $readers->cancels, 'lookup failure does not terminate blindly' );
-// A terminated checkout with no SumUp transaction is over once the grace period has passed (a
-// physical Solo never records one; a tap that raced the terminate needs time to show up); any
-// transaction that exists wins; nothing is remembered when terminate was refused or the write failed.
+// SumUp records no transaction for a checkout nobody paid, so "it is over" is the authenticated
+// reader status (IDLE, active since the checkout or our terminate), only after a grace period, only
+// on an empty lookup; any transaction that exists wins; nothing is remembered when terminate was
+// refused or the marker write failed.
 use WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider;
+$grace = SumUp_Server_Provider::TERMINATE_GRACE_SECONDS;
+$idle = function ( $ago ) { return array( 'data' => array( 'state' => 'IDLE', 'last_activity' => gmdate( 'Y-m-d\TH:i:s\Z', time() - $ago ) ) ); };
 $GLOBALS['transients'] = array();
-$transactions->result = array(); $readers->cancel_result = true; $readers->cancels = array();
-expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'before terminate, 404 is still waiting' );
+$transactions->result = array(); $readers->cancel_result = true; $readers->cancels = array(); $readers->status_result = $idle( 0 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'no marker: still waiting, reader not asked' );
 expect( 'requested' === $provider->cancel( 'reader:client:123' ), 'terminate accepted' );
-expect( 15 * MINUTE_IN_SECONDS === end( $GLOBALS['ttls'] ), 'terminate remembered for fifteen minutes' );
-expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'inside the grace period, 404 is still waiting' );
-$key = key( $GLOBALS['transients'] );
-$GLOBALS['transients'][ $key ] = time() - SumUp_Server_Provider::TERMINATE_GRACE_SECONDS;
-expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'after the grace period, 404 is cancelled' );
+$key = 'sutwc_terminated_' . md5( 'client:123' );
+expect( isset( $GLOBALS['transients'][ $key ] ) && 15 * MINUTE_IN_SECONDS === $GLOBALS['ttls'][ $key ], 'terminate remembered for fifteen minutes' );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'inside the grace period: still waiting, reader not asked' );
+$GLOBALS['transients'][ $key ] = time() - $grace;
+$readers->status_result = array( 'data' => array( 'state' => 'PROCESSING', 'last_activity' => gmdate( 'Y-m-d\TH:i:s\Z' ) ) );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array( 'reader' ) === $readers->status_calls, 'reader still busy: waiting' );
+$readers->status_result = $idle( $grace + 60 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'idle but inactive since before the terminate: waiting' );
+$readers->status_result = false;
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'status call failed: waiting' );
+$readers->status_result = $idle( 0 );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'idle since the terminate, no transaction: cancelled' );
 expect( 'pending' === $provider->fetch( 'reader:client:999' )['status'], 'another checkout is untouched' );
 foreach ( array( 'SUCCESSFUL' => 'completed', 'PENDING' => 'in_progress', 'SOMETHING_NEW' => 'pending' ) as $status => $expected ) {
 	$transactions->result = server_transaction( $status );
-	expect( $expected === $provider->fetch( 'reader:client:123' )['status'], "a transaction that exists ($status) wins over the terminate" );
+	expect( $expected === $provider->fetch( 'reader:client:123' )['status'], "a transaction that exists ($status) wins" );
 }
+// The reader gave up on its own (about a minute, no terminate from the till): the checkout marker
+// written at creation is the "since", so the walk-away leg ends when the reader is idle again.
+$GLOBALS['transients'] = array( 'sutwc_checkout_' . md5( 'client:123' ) => time() - 90 );
+$transactions->result = array(); $readers->status_result = $idle( 30 );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'reader idle after the checkout began: cancelled without a terminate' );
+$readers->status_result = $idle( 120 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'idle since before the checkout: the push may not have arrived yet' );
 $GLOBALS['transients'] = array();
-$transactions->result = array(); $readers->cancel_result = false;
+$readers->cancel_result = false;
 provider_error_expect( $provider->cancel( 'reader:client:123' ) );
 expect( array() === $GLOBALS['transients'], 'a refused terminate is not remembered' );
-expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'and the poll keeps waiting' );
-$readers->cancel_result = true; $GLOBALS['transient_write_fails'] = true;
+$readers->cancel_result = true; $GLOBALS['transient_write_fails'] = true; $readers->status_result = $idle( 0 );
 expect( 'requested' === $provider->cancel( 'reader:client:123' ), 'terminate still accepted when the marker cannot be written' );
-expect( array() === $GLOBALS['transients'], 'nothing remembered' );
-expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'the poll waits for the deadline, as before the marker' );
+expect( array() === $GLOBALS['transients'] && 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'nothing remembered: the poll waits for the deadline' );
 unset( $GLOBALS['transient_write_fails'] );
 echo "server-cancel ok\n";

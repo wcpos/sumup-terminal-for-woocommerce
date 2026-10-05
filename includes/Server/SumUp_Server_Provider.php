@@ -170,6 +170,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( empty( $result['data']['client_transaction_id'] ) ) {
 					return self::error( 'SumUp checkout did not return a client transaction ID.' );
 				}
+				// When the reader later reports itself idle, fetch() needs to know the checkout
+				// predates that idleness (see fetch()).
+				self::remember( 'checkout', $result['data']['client_transaction_id'] );
 				return array(
 					'ref' => $reader_id . ':' . $result['data']['client_transaction_id'],
 					'expires_at' => null,
@@ -186,19 +189,21 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	public function fetch( string $ref ) {
 		return $this->call(
 			function () use ( $ref ) {
-				$client_id = explode( ':', $ref, 2 )[1] ?? '';
+				list( $reader_id, $client_id ) = array_pad( explode( ':', $ref, 2 ), 2, '' );
 				$transaction = $this->lookup( $client_id );
 				if ( is_wp_error( $transaction ) ) {
 					return $transaction;
 				}
 				$observation = self::normalize( $transaction );
-				// A checkout WE terminated that SumUp STILL has no transaction for is over: a
-				// physical Solo never records a transaction for a cancelled checkout (the Virtual
-				// Solo did), so the lookup would say "still waiting" until the deadline (first
-				// physical run, 2026-10-05). Only an EMPTY lookup qualifies — any transaction, even
-				// one in a state this code does not know, is the customer's and wins — and only
-				// after a grace period, so a tap that raced the terminate has time to show up.
-				if ( array() === $transaction && self::terminated( $client_id ) ) {
+				// SumUp records no transaction for a checkout nobody paid: a physical Solo that
+				// was terminated from the till, or that gave up on its own after about a minute,
+				// leaves the lookup empty for good, and the till would spin until the five-minute
+				// deadline (first physical run, 2026-10-05). The evidence that it is over is the
+				// authenticated reader status: the reader reports itself IDLE with a last_activity
+				// after the checkout began (or after our terminate). Only an EMPTY lookup qualifies
+				// — any transaction, in any state, is the customer's and wins — and only after a
+				// grace period, so a tap that raced the end has time to become a transaction.
+				if ( array() === $transaction && $this->reader_finished( $reader_id, $client_id ) ) {
 					$observation['status'] = 'cancelled';
 				}
 				return $observation;
@@ -215,35 +220,63 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 * @param string $client_id SumUp client transaction ID.
 	 */
 	private static function remember_terminated( string $client_id ): void {
-		if ( ! set_transient( self::terminated_key( $client_id ), time(), 15 * MINUTE_IN_SECONDS ) ) {
+		self::remember( 'terminated', $client_id );
+	}
+
+	/**
+	 * Remember when this checkout began, or when the store terminated it.
+	 *
+	 * @param string $what      `checkout` or `terminated`.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function remember( string $what, string $client_id ): void {
+		if ( '' === $client_id ) {
+			return;
+		}
+		if ( ! set_transient( self::marker_key( $what, $client_id ), time(), 15 * MINUTE_IN_SECONDS ) ) {
 			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
-			// this marker existed: slower for the cashier, never wrong about money.
-			Logger::log( "SumUp terminate for $client_id could not be remembered; the cancel confirms at the deadline." );
+			// these markers existed: slower for the cashier, never wrong about money.
+			Logger::log( "SumUp $what marker for $client_id could not be written; the cancel confirms at the deadline." );
 		}
 	}
 
 	/**
-	 * Whether the store terminated this checkout long enough ago for an in-flight tap to have
-	 * produced a transaction: SumUp's terminate is asynchronous, and a card presented in the same
-	 * second can still charge, so an empty lookup is trusted only after the grace period.
+	 * Whether the reader has finished with this checkout without a transaction: the checkout (or
+	 * our terminate) is older than the grace period, and the authenticated reader status says the
+	 * device is IDLE with activity since then. A reader still showing the amount, a status call
+	 * that fails, or activity older than the checkout all mean "still waiting".
 	 *
+	 * @param string $reader_id SumUp reader ID.
 	 * @param string $client_id SumUp client transaction ID.
 	 */
-	private static function terminated( string $client_id ): bool {
-		if ( '' === $client_id ) {
+	private function reader_finished( string $reader_id, string $client_id ): bool {
+		if ( '' === $reader_id || '' === $client_id ) {
 			return false;
 		}
-		$at = get_transient( self::terminated_key( $client_id ) );
-		return false !== $at && time() - (int) $at >= self::TERMINATE_GRACE_SECONDS;
+		$since = get_transient( self::marker_key( 'terminated', $client_id ) );
+		if ( false === $since ) {
+			$since = get_transient( self::marker_key( 'checkout', $client_id ) );
+		}
+		if ( false === $since || time() - (int) $since < self::TERMINATE_GRACE_SECONDS ) {
+			return false;
+		}
+		$status = $this->readers->get_status( $reader_id );
+		if ( ! is_array( $status ) ) {
+			return false;
+		}
+		$state = $status['data']['state'] ?? $status['state'] ?? '';
+		$activity = strtotime( (string) ( $status['data']['last_activity'] ?? $status['last_activity'] ?? '' ) );
+		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= (int) $since;
 	}
 
 	/**
-	 * Transient key for a terminated checkout.
+	 * Transient key for a checkout marker.
 	 *
+	 * @param string $what      `checkout` or `terminated`.
 	 * @param string $client_id SumUp client transaction ID.
 	 */
-	private static function terminated_key( string $client_id ): string {
-		return 'sutwc_terminated_' . md5( $client_id );
+	private static function marker_key( string $what, string $client_id ): string {
+		return 'sutwc_' . $what . '_' . md5( $client_id );
 	}
 
 	/**
