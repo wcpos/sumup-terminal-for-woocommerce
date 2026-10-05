@@ -42,6 +42,13 @@ $readers->status_result = false;
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'status call failed: waiting' );
 $readers->status_result = $idle( 0 );
 expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'idle since the terminate, no transaction: cancelled' );
+// A terminate of a checkout the reader had already dropped: no new activity after the terminate,
+// but activity after the checkout began, which is what counts.
+$GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'client:123' ) ] = time() - 400;
+$readers->status_result = $idle( 300 );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'reader idle since the checkout began, terminated later: cancelled' );
+unset( $GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'client:123' ) ] );
+$readers->status_result = $idle( 0 );
 expect( 'pending' === $provider->fetch( 'reader:client:999' )['status'], 'another checkout is untouched' );
 foreach ( array( 'SUCCESSFUL' => 'completed', 'PENDING' => 'in_progress', 'SOMETHING_NEW' => 'pending' ) as $status => $expected ) {
 	$transactions->result = server_transaction( $status );

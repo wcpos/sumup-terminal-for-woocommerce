@@ -253,20 +253,26 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		if ( '' === $reader_id || '' === $client_id ) {
 			return false;
 		}
-		$since = get_transient( self::marker_key( 'terminated', $client_id ) );
-		if ( false === $since ) {
-			$since = get_transient( self::marker_key( 'checkout', $client_id ) );
+		$started = get_transient( self::marker_key( 'checkout', $client_id ) );
+		$terminated = get_transient( self::marker_key( 'terminated', $client_id ) );
+		if ( false === $started && false === $terminated ) {
+			return false;
 		}
-		if ( false === $since || time() - (int) $since < self::TERMINATE_GRACE_SECONDS ) {
+		// The grace runs from the latest thing that happened; the reader's activity is measured
+		// from the checkout's start, because terminating a checkout the reader already dropped
+		// (its own timeout) produces no new activity on the device.
+		$latest = max( (int) $started, (int) $terminated );
+		$since  = false !== $started ? (int) $started : (int) $terminated;
+		if ( time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
 			return false;
 		}
 		$status = $this->readers->get_status( $reader_id );
 		if ( ! is_array( $status ) ) {
 			return false;
 		}
-		$state = $status['data']['state'] ?? $status['state'] ?? '';
+		$state    = $status['data']['state'] ?? $status['state'] ?? '';
 		$activity = strtotime( (string) ( $status['data']['last_activity'] ?? $status['last_activity'] ?? '' ) );
-		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= (int) $since;
+		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= $since;
 	}
 
 	/**
