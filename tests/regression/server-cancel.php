@@ -58,7 +58,8 @@ foreach ( array( 'SUCCESSFUL' => 'completed', 'PENDING' => 'in_progress', 'SOMET
 // written at creation is the "since", so the walk-away leg ends when the reader is idle again.
 $GLOBALS['transients'] = array( 'sutwc_checkout_' . md5( 'client:123' ) => time() - 90 );
 $transactions->result = array(); $readers->status_result = $idle( 30 );
-expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'reader idle after the checkout began: cancelled without a terminate' );
+$walked = $provider->fetch( 'reader:client:123' );
+expect( 'cancelled' === $walked['status'] && 'expired' === $walked['failure_reason'], 'reader idle after the checkout began: cancelled without a terminate, as a timeout' );
 $readers->status_result = $idle( 120 );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'idle since before the checkout: the push may not have arrived yet' );
 $GLOBALS['transients'] = array();

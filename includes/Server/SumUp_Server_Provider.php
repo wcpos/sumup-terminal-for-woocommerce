@@ -205,6 +205,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				// grace period, so a tap that raced the end has time to become a transaction.
 				if ( array() === $transaction && $this->reader_finished( $reader_id, $client_id ) ) {
 					$observation['status'] = 'cancelled';
+					// Nobody paid and nobody pressed cancel on the device (that leaves a FAILED
+					// transaction): the reader timed out. The till ignores the reason when it asked
+					// for the cancel itself (that row is voided), so this only ever names a timeout.
+					$observation['failure_reason'] = 'expired';
 				}
 				return $observation;
 			}
