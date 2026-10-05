@@ -41,7 +41,7 @@ namespace {
 	if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; } }
 	if ( ! function_exists( 'update_option' ) ) { function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; } }
 	if ( ! function_exists( 'get_transient' ) ) { function get_transient( $key ) { return $GLOBALS['transients'][ $key ] ?? false; } }
-	if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $ttl ) { $GLOBALS['transients'][ $key ] = $value; $GLOBALS['ttls'][ $key ] = $ttl; return true; } }
+	if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $ttl ) { if ( ! empty( $GLOBALS['transient_write_fails'] ) ) { return false; } $GLOBALS['transients'][ $key ] = $value; $GLOBALS['ttls'][ $key ] = $ttl; return true; } }
 	if ( ! function_exists( 'delete_transient' ) ) { function delete_transient( $key ) { unset( $GLOBALS['transients'][ $key ] ); return true; } }
 	if ( ! defined( 'MINUTE_IN_SECONDS' ) ) { define( 'MINUTE_IN_SECONDS', 60 ); }
 	if ( ! function_exists( 'delete_option' ) ) { function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; } }

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Server;
 
+use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
 use WCPOS\WooCommercePOS\SumUpTerminal\Settings;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
 use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
@@ -16,6 +17,13 @@ use WCPOS\WooCommercePOSPro\Payments\Server\Money_Units;
 
 /** Solo provider, independent of the legacy order-pay flow. */
 class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abstract_Provider_Adapter {
+	/**
+	 * How long after our terminate an empty transaction lookup is trusted as "cancelled".
+	 * Long enough for a tap that raced the terminate to become a transaction SumUp lists;
+	 * short enough that the cashier sees the cancel confirmed, not the five-minute deadline.
+	 */
+	public const TERMINATE_GRACE_SECONDS = 10;
+
 	/** Merchant profile.
 	 *
 	 * @var ProfileService
@@ -184,11 +192,13 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 					return $transaction;
 				}
 				$observation = self::normalize( $transaction );
-				// A checkout WE terminated that SumUp has no transaction for is over: a physical
-				// Solo never records a transaction for a cancelled checkout (the Virtual Solo did),
-				// so the lookup would say "still waiting" until the deadline (first physical run,
-				// 2026-10-05). A transaction that does exist (the customer tapped first) wins above.
-				if ( 'pending' === $observation['status'] && self::terminated( $client_id ) ) {
+				// A checkout WE terminated that SumUp STILL has no transaction for is over: a
+				// physical Solo never records a transaction for a cancelled checkout (the Virtual
+				// Solo did), so the lookup would say "still waiting" until the deadline (first
+				// physical run, 2026-10-05). Only an EMPTY lookup qualifies — any transaction, even
+				// one in a state this code does not know, is the customer's and wins — and only
+				// after a grace period, so a tap that raced the terminate has time to show up.
+				if ( array() === $transaction && self::terminated( $client_id ) ) {
 					$observation['status'] = 'cancelled';
 				}
 				return $observation;
@@ -205,16 +215,26 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 * @param string $client_id SumUp client transaction ID.
 	 */
 	private static function remember_terminated( string $client_id ): void {
-		set_transient( self::terminated_key( $client_id ), time(), 15 * MINUTE_IN_SECONDS );
+		if ( ! set_transient( self::terminated_key( $client_id ), time(), 15 * MINUTE_IN_SECONDS ) ) {
+			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
+			// this marker existed: slower for the cashier, never wrong about money.
+			Logger::log( "SumUp terminate for $client_id could not be remembered; the cancel confirms at the deadline." );
+		}
 	}
 
 	/**
-	 * Whether the store terminated this checkout within the last fifteen minutes.
+	 * Whether the store terminated this checkout long enough ago for an in-flight tap to have
+	 * produced a transaction: SumUp's terminate is asynchronous, and a card presented in the same
+	 * second can still charge, so an empty lookup is trusted only after the grace period.
 	 *
 	 * @param string $client_id SumUp client transaction ID.
 	 */
 	private static function terminated( string $client_id ): bool {
-		return '' !== $client_id && false !== get_transient( self::terminated_key( $client_id ) );
+		if ( '' === $client_id ) {
+			return false;
+		}
+		$at = get_transient( self::terminated_key( $client_id ) );
+		return false !== $at && time() - (int) $at >= self::TERMINATE_GRACE_SECONDS;
 	}
 
 	/**
