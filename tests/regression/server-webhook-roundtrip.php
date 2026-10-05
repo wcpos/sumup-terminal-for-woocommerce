@@ -13,8 +13,8 @@ $transactions->result = array( 'items' => array( server_transaction() ) );
 $GLOBALS['transients'] = array();
 $verified = $provider->verify_webhook( $request );
 expect( ! is_wp_error( $verified ), 'successful verification' );
-$seen = 'sutwc_webhook_' . md5( 'client:123' );
-expect( isset( $GLOBALS['transients'][ $seen ] ) && abs( time() - $GLOBALS['transients'][ $seen ] ) <= 1 && 15 * MINUTE_IN_SECONDS === $GLOBALS['ttls'][ $seen ], 'the delivery is remembered for the cancel poll' );
+$ended = 'sutwc_ended_' . md5( 'client:123' );
+expect( ! isset( $GLOBALS['transients'][ $ended ] ), 'a successful delivery never shortens the cancel grace: SumUp may not list the money yet' );
 wcpos_settle_payment( $verified['payment_id'], $verified['patch'] );
 expect( strtolower( server_row()['id'] ) === $settled[0][0], 'query id is canonicalized' );
 $patch = $settled[0][1];
@@ -24,8 +24,19 @@ foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_t
 	expect( array( 'event_id' => 'event-123' ) === $provider->verify_webhook( $request )['patch'], 'unconfirmed webhook is event-only' );
 }
 $transactions->result = server_transaction();
+foreach ( array( 'pending', 'something_new', '' ) as $status ) {
+	$event['payload']['status'] = $status; $request->set_body( json_encode( $event ) );
+	$provider->verify_webhook( $request );
+	expect( ! isset( $GLOBALS['transients'][ $ended ] ), "a '$status' delivery is not the end of the checkout" );
+}
 $event['payload']['status'] = 'failed'; $request->set_body( json_encode( $event ) );
 expect( array( 'event_id' => 'event-123' ) === $provider->verify_webhook( $request )['patch'], 'poll owns non-money outcomes' );
+expect( isset( $GLOBALS['transients'][ $ended ] ) && abs( time() - $GLOBALS['transients'][ $ended ] ) <= 1 && 15 * MINUTE_IN_SECONDS === $GLOBALS['ttls'][ $ended ], 'a failed delivery is remembered for the cancel poll' );
+unset( $GLOBALS['transients'][ $ended ] );
+$event['payload']['status'] = 'CANCELLED'; $request->set_body( json_encode( $event ) );
+$provider->verify_webhook( $request );
+expect( isset( $GLOBALS['transients'][ $ended ] ), 'a cancelled delivery, any case, is remembered too' );
+$event['payload']['status'] = 'failed';
 unset( $event['id'] );
 expect( array( 'event_id' => 'client:123:failed' ) === Provider::webhook_patch( $event, server_transaction() ), 'fallback dedupe key' );
 $event['payload']['merchant_code'] = 'other'; $request->set_body( json_encode( $event ) );

@@ -33,9 +33,10 @@ expect( 'requested' === $provider->cancel( 'reader:client:123' ), 'terminate acc
 $key = 'sutwc_terminated_' . md5( 'client:123' );
 expect( isset( $GLOBALS['transients'][ $key ] ) && 15 * MINUTE_IN_SECONDS === $GLOBALS['ttls'][ $key ], 'terminate remembered for fifteen minutes' );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'inside the grace period: still waiting, reader not asked' );
-// SumUp's delivery for this checkout, arriving after our terminate, waives the grace: the reader has
-// processed the terminate, so the authenticated status is asked at once — and still decides alone.
-$seen = 'sutwc_webhook_' . md5( 'client:123' );
+// SumUp's delivery that this checkout ended without money, arriving after our terminate, waives the
+// grace: the race the grace covers is over, so the authenticated status is asked at once — and still
+// decides alone.
+$seen = 'sutwc_ended_' . md5( 'client:123' );
 expect( is_float( $GLOBALS['transients'][ $key ] ), 'markers are sub-second so same-second order is kept' );
 $GLOBALS['transients'][ $seen ] = $GLOBALS['transients'][ $key ] - 1;
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'a delivery from before the terminate waives nothing' );
