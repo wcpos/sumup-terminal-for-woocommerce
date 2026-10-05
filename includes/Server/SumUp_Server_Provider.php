@@ -178,10 +178,52 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	public function fetch( string $ref ) {
 		return $this->call(
 			function () use ( $ref ) {
-				$transaction = $this->lookup( explode( ':', $ref, 2 )[1] ?? '' );
-				return is_wp_error( $transaction ) ? $transaction : self::normalize( $transaction );
+				$client_id = explode( ':', $ref, 2 )[1] ?? '';
+				$transaction = $this->lookup( $client_id );
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				$observation = self::normalize( $transaction );
+				// A checkout WE terminated that SumUp has no transaction for is over: a physical
+				// Solo never records a transaction for a cancelled checkout (the Virtual Solo did),
+				// so the lookup would say "still waiting" until the deadline (first physical run,
+				// 2026-10-05). A transaction that does exist (the customer tapped first) wins above.
+				if ( 'pending' === $observation['status'] && self::terminated( $client_id ) ) {
+					$observation['status'] = 'cancelled';
+				}
+				return $observation;
 			}
 		);
+	}
+
+	/**
+	 * Remember that the store asked SumUp to terminate this checkout.
+	 *
+	 * Only our own terminate counts: an unsigned `failed` delivery must never end a payment,
+	 * because a late SUCCESSFUL after a failed row is ignored and the money would be lost.
+	 *
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function remember_terminated( string $client_id ): void {
+		set_transient( self::terminated_key( $client_id ), time(), 15 * MINUTE_IN_SECONDS );
+	}
+
+	/**
+	 * Whether the store terminated this checkout within the last fifteen minutes.
+	 *
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function terminated( string $client_id ): bool {
+		return '' !== $client_id && false !== get_transient( self::terminated_key( $client_id ) );
+	}
+
+	/**
+	 * Transient key for a terminated checkout.
+	 *
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function terminated_key( string $client_id ): string {
+		return 'sutwc_terminated_' . md5( $client_id );
 	}
 
 	/**
@@ -252,7 +294,12 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				}
 				$result = $this->readers->cancel_checkout( $parts[0] );
 				// Terminate is asynchronous; acceptance never proves that money was not taken.
-				return false === $result || is_wp_error( $result ) ? self::error( $result ) : 'requested';
+				if ( false === $result || is_wp_error( $result ) ) {
+					return self::error( $result );
+				}
+				// The next poll confirms the cancel when SumUp still has no transaction (see fetch()).
+				self::remember_terminated( $parts[1] ?? '' );
+				return 'requested';
 			}
 		);
 	}
