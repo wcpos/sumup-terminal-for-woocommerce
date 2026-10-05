@@ -33,6 +33,23 @@ expect( 'requested' === $provider->cancel( 'reader:client:123' ), 'terminate acc
 $key = 'sutwc_terminated_' . md5( 'client:123' );
 expect( isset( $GLOBALS['transients'][ $key ] ) && 15 * MINUTE_IN_SECONDS === $GLOBALS['ttls'][ $key ], 'terminate remembered for fifteen minutes' );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'inside the grace period: still waiting, reader not asked' );
+// SumUp's delivery for this checkout, arriving after our terminate, waives the grace: the reader has
+// processed the terminate, so the authenticated status is asked at once — and still decides alone.
+$seen = 'sutwc_webhook_' . md5( 'client:123' );
+$GLOBALS['transients'][ $seen ] = $GLOBALS['transients'][ $key ] - 1;
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'a delivery from before the terminate waives nothing' );
+$GLOBALS['transients'][ $seen ] = time();
+$readers->status_result = array( 'data' => array( 'state' => 'PROCESSING', 'last_activity' => gmdate( 'Y-m-d\TH:i:s\Z' ) ) );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array( 'reader' ) === $readers->status_calls, 'delivery after the terminate, reader still busy: asked at once, still waiting' );
+$readers->status_result = $idle( 0 );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'delivery after the terminate, reader idle: cancelled inside the grace period' );
+unset( $GLOBALS['transients'][ $seen ] );
+$readers->status_calls = array();
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'without the delivery the grace period holds' );
+// A walk-away (no terminate) never shortens on a delivery alone.
+$GLOBALS['transients'] = array( 'sutwc_checkout_' . md5( 'client:123' ) => time(), $seen => time() );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array() === $readers->status_calls, 'a delivery without our terminate waives nothing' );
+$GLOBALS['transients'] = array( $key => time() );
 $GLOBALS['transients'][ $key ] = time() - $grace;
 $readers->status_result = array( 'data' => array( 'state' => 'PROCESSING', 'last_activity' => gmdate( 'Y-m-d\TH:i:s\Z' ) ) );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array( 'reader' ) === $readers->status_calls, 'reader still busy: waiting' );
