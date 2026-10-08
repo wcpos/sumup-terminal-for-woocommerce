@@ -13,8 +13,15 @@ final class Legacy_Adoption {
 	public const VERSION = '1.0.0';
 	/** Candidates per `init` request; keeps the admin request that triggers it short. */
 	public const PAGE_SIZE = 25;
-	/** Requests a recorded success is asked about again when SumUp gives no answer. */
-	public const MAX_LOOKUP_TRIES = 5;
+	/**
+	 * Seconds to wait before asking SumUp again about a recorded success it did not answer for,
+	 * one entry per silent try; after the last the order is given up with a note. SumUp may not
+	 * list a transaction for a short while after its delivery, and an outage must be outlived,
+	 * not counted.
+	 */
+	public const LOOKUP_BACKOFF = array( 60, 300, 900, 3600, 21600 );
+	/** The sweep that works the completion queue: Free's ten-minute payments sweep. */
+	public const SWEEP_HOOK = 'wcpos_payments_sweep';
 	/** Provider family, as SumUp_Server_Provider::provider() reports it. */
 	public const PROVIDER = 'sumup';
 	/** The old panel's checkout status; `PENDING` once the reader has the checkout. */
@@ -61,9 +68,6 @@ final class Legacy_Adoption {
 	/** Run the next page of adoption, until every candidate snapshotted at the start has been seen. */
 	public static function upgrade(): void {
 		if ( version_compare( (string) get_option( 'sutwc_adoption_version', '0' ), self::VERSION, '>=' ) ) {
-			// The adoption pass is over; recorded successes are still asked about whenever the
-			// queue holds any, since the webhook hands an order here when SumUp could not be asked.
-			self::complete_recorded_page();
 			return;
 		}
 		// The candidates are snapshotted once, as id => action reference, when the pass begins:
@@ -135,21 +139,43 @@ final class Legacy_Adoption {
 			delete_option( 'sutwc_adoption_queue' );
 			update_option( 'sutwc_adoption_version', self::VERSION, false );
 		}
-		self::complete_recorded_page();
 	}
 
 	/**
-	 * Queue an order whose recorded success is to be completed on SumUp's word.
+	 * Queue an order whose recorded success is to be completed on SumUp's word, off the request
+	 * path: the sweep asks SumUp on its next run (or after `$delay`), never a page view.
 	 *
 	 * @param int $order_id Order id.
+	 * @param int $delay    Seconds before the first ask; 0 for the next sweep.
 	 */
-	public static function queue_recorded( int $order_id ): void {
+	public static function queue_recorded( int $order_id, int $delay = 0 ): void {
+		self::update_queue(
+			static function ( array $queue ) use ( $order_id, $delay ) {
+				if ( ! isset( $queue[ $order_id ] ) ) {
+					$queue[ $order_id ] = array(
+						'tries'   => 0,
+						'next_at' => time() + $delay,
+					);
+				}
+				return $queue;
+			}
+		);
+	}
+
+	/**
+	 * Rewrite the completion queue from a fresh read, so two requests (a sweep and a webhook, or
+	 * two webhooks) cannot overwrite each other's entries.
+	 *
+	 * @param callable $change Receives the current queue, returns the new one.
+	 */
+	private static function update_queue( callable $change ): void {
 		$queue = get_option( 'sutwc_completion_queue', array() );
-		$queue = is_array( $queue ) ? $queue : array();
-		if ( ! isset( $queue[ $order_id ] ) ) {
-			$queue[ $order_id ] = 0;
-			update_option( 'sutwc_completion_queue', $queue, false );
+		$queue = $change( is_array( $queue ) ? $queue : array() );
+		if ( array() === $queue ) {
+			delete_option( 'sutwc_completion_queue' );
+			return;
 		}
+		update_option( 'sutwc_completion_queue', $queue, false );
 	}
 
 	/**
@@ -182,38 +208,68 @@ final class Legacy_Adoption {
 	}
 
 	/**
-	 * Complete one page of recorded successes, each under the order lock on SumUp's word.
-	 * The queue maps order id to the number of requests on which SumUp gave no answer; an
-	 * order leaves it on a definite answer, on completion, or after MAX_LOOKUP_TRIES silences.
+	 * Work the completion queue: run on Free's payments sweep (every ten minutes, off the
+	 * request path). Each entry due now is asked about once; an order leaves the queue on a
+	 * definite answer or on completion; one SumUp did not answer for waits the next backoff
+	 * step, and after the last step it is given up with an order note for staff.
 	 */
-	private static function complete_recorded_page(): void {
+	public static function complete_recorded_page(): void {
 		$queue = get_option( 'sutwc_completion_queue', array() );
 		if ( ! is_array( $queue ) || array() === $queue ) {
 			return;
 		}
 		$handler = new AjaxHandler();
-		foreach ( array_slice( $queue, 0, self::PAGE_SIZE, true ) as $order_id => $tries ) {
+		$now     = time();
+		$changes = array(); // order id => new entry, or null to remove.
+		foreach ( array_slice( $queue, 0, self::PAGE_SIZE, true ) as $order_id => $entry ) {
+			$tries = (int) ( $entry['tries'] ?? 0 );
+			if ( (int) ( $entry['next_at'] ?? 0 ) > $now ) {
+				continue;
+			}
 			$result = self::complete_recorded( (int) $order_id, $handler );
 			if ( is_wp_error( $result ) ) {
 				$code = $result->get_error_code();
 				if ( in_array( $code, array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {
-					// A held lock is a till at work on that order: it stays queued, untouched.
+					// A held lock is a till at work on that order: it stays as it is.
 					continue;
 				}
-				if ( 'sutwc_lookup_unavailable' === $code && (int) $tries + 1 < self::MAX_LOOKUP_TRIES ) {
-					// SumUp could not be asked: ask again on a later request.
-					$queue[ $order_id ] = (int) $tries + 1;
+				if ( 'sutwc_lookup_unavailable' === $code && isset( self::LOOKUP_BACKOFF[ $tries ] ) ) {
+					$changes[ $order_id ] = array(
+						'tries'   => $tries + 1,
+						'next_at' => $now + self::LOOKUP_BACKOFF[ $tries ],
+					);
 					continue;
 				}
-				Logger::log( 'Legacy SumUp completion gave up on order ' . $order_id . ': ' . $code );
+				self::give_up( (int) $order_id, $code );
 			}
-			unset( $queue[ $order_id ] );
+			$changes[ $order_id ] = null;
 		}
-		if ( array() === $queue ) {
-			delete_option( 'sutwc_completion_queue' );
-			return;
+		self::update_queue(
+			static function ( array $queue ) use ( $changes ) {
+				foreach ( $changes as $order_id => $entry ) {
+					if ( null === $entry ) {
+						unset( $queue[ $order_id ] );
+					} else {
+						$queue[ $order_id ] = $entry;
+					}
+				}
+				return $queue;
+			}
+		);
+	}
+
+	/**
+	 * Stop asking about an order and tell staff, on the order, that it needs a look.
+	 *
+	 * @param int    $order_id Order id.
+	 * @param string $code     The last error code.
+	 */
+	private static function give_up( int $order_id, string $code ): void {
+		Logger::log( 'Legacy SumUp completion gave up on order ' . $order_id . ': ' . $code );
+		$order = wc_get_order( $order_id );
+		if ( $order ) {
+			$order->add_order_note( __( 'SumUp recorded a successful card payment for this order on the previous order-pay panel, but SumUp could not confirm it when asked. Check the transaction in the SumUp dashboard before taking payment again.', 'sumup-terminal-for-woocommerce' ) );
 		}
-		update_option( 'sutwc_completion_queue', $queue, false );
 	}
 
 	/**

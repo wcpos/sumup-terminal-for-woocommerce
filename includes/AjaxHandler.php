@@ -239,7 +239,7 @@ class AjaxHandler {
 		// could not be asked, or the lock was held, the pass asks again on a later request.
 		$completed = Legacy_Adoption::complete_recorded( (int) $order->get_id(), $this );
 		if ( is_wp_error( $completed ) ) {
-			Legacy_Adoption::queue_recorded( (int) $order->get_id() );
+			Legacy_Adoption::queue_recorded( (int) $order->get_id(), Legacy_Adoption::LOOKUP_BACKOFF[0] );
 		}
 	}
 

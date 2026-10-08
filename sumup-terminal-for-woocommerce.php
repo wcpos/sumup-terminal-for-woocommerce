@@ -113,8 +113,10 @@ function init(): void {
 	// The keypad's server and device modes, on Pro's shared base.
 	Server\Registration::register();
 
-	// Fold attempts the old order-pay panel left mid-flight into Pro's ledger.
+	// Fold attempts the old order-pay panel left mid-flight into Pro's ledger, and complete
+	// recorded successes on Free's payments sweep, off the request path.
 	add_action( 'init', array( Legacy_Adoption::class, 'upgrade' ), 20 );
+	add_action( Legacy_Adoption::SWEEP_HOOK, array( Legacy_Adoption::class, 'complete_recorded_page' ) );
 
 	// Initialize AJAX handlers early.
 	new AjaxHandler();

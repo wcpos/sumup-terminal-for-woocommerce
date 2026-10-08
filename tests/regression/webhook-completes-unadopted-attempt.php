@@ -88,7 +88,7 @@ foreach ( array( false, new WP_Error( 'sumup_api_error', 'down' ) ) as $lookup )
 	$handler->lookup = $lookup;
 	$order = new WC_Order(); $GLOBALS['fresh'] = $order;
 	$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
-	expect( array() === $order->completed && array( 42 => 0 ) === $GLOBALS['options']['sutwc_completion_queue'], 'no answer completes nothing and queues the order' );
+	expect( array() === $order->completed && 0 === $GLOBALS['options']['sutwc_completion_queue'][42]['tries'] && $GLOBALS['options']['sutwc_completion_queue'][42]['next_at'] >= time() + 60, 'no answer completes nothing and queues the order for the sweep, after the first backoff' );
 }
 $GLOBALS['options'] = array();
 

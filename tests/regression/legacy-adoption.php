@@ -5,6 +5,8 @@
 // when the pass began, under Free's order lock with a fresh read; everything else is skipped.
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal {
+	// The plugin's own namespace resolves time() here first: a clock the script controls.
+	function time() { return $GLOBALS['now']; }
 	class AjaxHandler {
 		public static $completed = array();
 		public static $answers   = array(); // order id => true | false | 'silent'
@@ -75,6 +77,8 @@ class WC_Order {
 	public function get_total() { return '12.50'; }
 	public function get_currency() { return 'EUR'; }
 	public function get_date_modified() { return $this->modified; }
+	public $notes = array();
+	public function add_order_note( $note ) { $this->notes[] = $note; }
 }
 
 function reset_state( array $page, int $newest, array $fresh = array() ) {
@@ -88,6 +92,7 @@ function reset_state( array $page, int $newest, array $fresh = array() ) {
 	$GLOBALS['adopted_map'] = array();
 	$GLOBALS['queries']     = array();
 	$GLOBALS['recorded']    = array();
+	$GLOBALS['now']         = 1000000;
 	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed = array();
 	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$answers   = array();
 	\WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider::$marked = array();
@@ -125,8 +130,9 @@ $GLOBALS['page'][0]->started = 0;
 Legacy_Adoption::upgrade();
 expect( array() === $GLOBALS['adopted'], 'an attempt with no start time is not adopted' );
 
-// 1c. A success the old panel recorded but never completed is completed on SumUp's word, under
-//     the lock, from the pass itself; an adopted order is not touched; a held lock keeps it queued.
+// 1c. A success the old panel recorded but never completed is queued by the pass and completed on
+//     the sweep, on SumUp's word, under the lock; an adopted order is not touched; a held lock keeps
+//     it queued. Page views never ask SumUp.
 reset_state( array(), 0 );
 $paid_pending = new WC_Order( 30, '', 'ctx_recorded', 'PAID' );
 $succ         = new WC_Order( 31, '', 'ctx_succ', '' );
@@ -135,71 +141,61 @@ $GLOBALS['recorded'] = array( 'PAID' => array( $paid_pending, $already ), 'SUCCE
 $GLOBALS['by_id']    = array( 30 => $paid_pending, 31 => $succ, 32 => $already );
 $GLOBALS['adopted_map'] = array( 'rdr_a:ctx_adopted2' => 'row-32' );
 Legacy_Adoption::upgrade();
+expect( array() === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed, 'the pass itself asks SumUp about nothing' );
+$queued = array_keys( $GLOBALS['options']['sutwc_completion_queue'] ); sort( $queued );
+expect( array( 30, 31, 32 ) === $queued && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'recorded successes are queued and the adoption pass is over' );
+Legacy_Adoption::complete_recorded_page();
 $completed = \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed; sort( $completed );
 $locked    = \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked; sort( $locked );
-expect( array( 30, 31 ) === $completed, 'recorded successes are completed from the pass, the adopted one is not' );
+expect( array( 30, 31 ) === $completed, 'the sweep completes the recorded successes, the adopted one is not touched' );
 expect( array( 30, 31, 32 ) === $locked, 'each completion runs under the order lock' );
-expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'] && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'the pass finishes once both queues are empty' );
+expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'the queue is cleared once empty' );
 reset_state( array(), 0 );
 $GLOBALS['recorded'] = array( 'PAID' => array( new WC_Order( 33, '', 'ctx_busy2', 'PAID' ) ) );
 $GLOBALS['by_id']    = array( 33 => $GLOBALS['recorded']['PAID'][0] );
 \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( 33 );
 Legacy_Adoption::upgrade();
-expect( array() === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 33 => 0 ) === $GLOBALS['options']['sutwc_completion_queue'], 'a held lock keeps the recorded success queued' );
+Legacy_Adoption::complete_recorded_page();
+expect( array() === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 'tries' => 0, 'next_at' => 1000000 ) === $GLOBALS['options']['sutwc_completion_queue'][33], 'a held lock keeps the recorded success queued, untouched' );
 
-// 1d. SumUp silent: the order is asked about again on later requests, up to the bound, then dropped;
-//     a definite no drops it at once. The queue keeps working after the adoption pass is over.
+// 1d. SumUp silent: the order waits each backoff step before being asked again, then is given up
+//     with an order note; a definite no drops it at once; entries not yet due are not asked.
 reset_state( array(), 0 );
 $silent = new WC_Order( 40, '', 'ctx_silent', 'PAID' ); $no = new WC_Order( 41, '', 'ctx_no', 'PAID' );
 $GLOBALS['recorded'] = array( 'PAID' => array( $silent, $no ) );
 $GLOBALS['by_id']    = array( 40 => $silent, 41 => $no );
 \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$answers = array( 40 => 'silent', 41 => false );
 Legacy_Adoption::upgrade();
-expect( array( 40 => 1 ) === $GLOBALS['options']['sutwc_completion_queue'], 'no answer keeps the order queued with one try counted; a definite no drops it' );
-expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'the adoption pass itself is over' );
-for ( $i = 1; $i < Legacy_Adoption::MAX_LOOKUP_TRIES - 1; $i++ ) { Legacy_Adoption::upgrade(); }
-expect( array( 40 => Legacy_Adoption::MAX_LOOKUP_TRIES - 1 ) === $GLOBALS['options']['sutwc_completion_queue'], 'each silent request counts a try' );
-Legacy_Adoption::upgrade();
-expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'after the bound the order is dropped and the queue cleared' );
-expect( Legacy_Adoption::MAX_LOOKUP_TRIES === count( array_keys( \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed, 40, true ) ), 'SumUp was asked exactly MAX_LOOKUP_TRIES times' );
+Legacy_Adoption::complete_recorded_page();
+expect( array( 40 => array( 'tries' => 1, 'next_at' => 1000000 + Legacy_Adoption::LOOKUP_BACKOFF[0] ) ) === $GLOBALS['options']['sutwc_completion_queue'], 'no answer schedules the next ask after the first backoff; a definite no drops the order' );
+$asked = count( \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed );
+Legacy_Adoption::complete_recorded_page();
+expect( $asked === count( \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed ), 'an entry not yet due is not asked again' );
+foreach ( Legacy_Adoption::LOOKUP_BACKOFF as $i => $wait ) {
+	$GLOBALS['now'] = $GLOBALS['options']['sutwc_completion_queue'][40]['next_at'] ?? $GLOBALS['now'];
+	Legacy_Adoption::complete_recorded_page();
+}
+expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'after the last backoff the order is given up and the queue cleared' );
+expect( count( Legacy_Adoption::LOOKUP_BACKOFF ) + 1 === count( array_keys( \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed, 40, true ) ), 'SumUp was asked about the silent order once per step plus the first time' );
+expect( 1 === count( $silent->notes ) && false !== strpos( $silent->notes[0], 'SumUp dashboard' ), 'giving up leaves staff a note on the order' );
+expect( array() === $no->notes, 'a definite no leaves no note' );
 
-// 1e. The webhook hands an order it could not ask about to the queue; a later request completes it.
+// 1e. The webhook hands an order it could not ask about to the queue with the first backoff; a
+//     sweep completes it even after the pass is over. Writes merge onto a fresh read.
 reset_state( array(), 0 );
 $GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
 $late = new WC_Order( 50, '', 'ctx_late_ok', 'PAID' );
 $GLOBALS['by_id'] = array( 50 => $late );
+Legacy_Adoption::queue_recorded( 50, Legacy_Adoption::LOOKUP_BACKOFF[0] );
 Legacy_Adoption::queue_recorded( 50 );
-Legacy_Adoption::queue_recorded( 50 );
-expect( array( 50 => 0 ) === $GLOBALS['options']['sutwc_completion_queue'], 'queueing is idempotent' );
-Legacy_Adoption::upgrade();
-expect( array( 50 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a queued order is completed on a later request even after the pass is over' );
-
-// 2. The queue is a snapshot: an attempt the old panel starts after the pass began is never a
-//    candidate, and a candidate whose reference changed (a retry) is skipped inside the lock.
-reset_state( array( new WC_Order( 7, 'rdr_a', 'ctx_old' ) ), 7, array( 7 => new WC_Order( 7, 'rdr_a', 'ctx_retried' ) ) );
-Legacy_Adoption::upgrade();
-expect( array() === $GLOBALS['adopted'], 'a retried attempt (new client id) is not adopted under the old reference' );
-reset_state( array( new WC_Order( 8, 'rdr_a', 'ctx_snap' ) ), 8 );
-$GLOBALS['options']['sutwc_adoption_queue'] = array();
-Legacy_Adoption::upgrade();
-expect( array() === $GLOBALS['adopted'] && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a pass whose snapshot is empty finishes without reading live orders' );
-
-// 3. The order is re-read under the lock; a till payment that landed meanwhile stops the adoption.
-reset_state( array( new WC_Order( 11, 'rdr_a', 'ctx_meanwhile' ) ), 11, array( 11 => new WC_Order( 11, 'rdr_a', 'ctx_meanwhile', 'PENDING', true ) ) );
-Legacy_Adoption::upgrade();
-expect( array() === $GLOBALS['adopted'], 'the fresh copy decides' );
-
-// 4. A full page leaves the rest of the queue for the next request; a held lock keeps its order queued.
-$page = array(); for ( $i = 1; $i <= Legacy_Adoption::PAGE_SIZE + 2; $i++ ) { $page[] = new WC_Order( $i, 'rdr_a', 'ctx_' . $i ); }
-reset_state( $page, 100 );
-Legacy_Adoption::upgrade();
-expect( Legacy_Adoption::PAGE_SIZE === count( $GLOBALS['adopted'] ) && 2 === count( $GLOBALS['options']['sutwc_adoption_queue'] ) && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a full page leaves the remainder queued' );
-Legacy_Adoption::upgrade();
-expect( Legacy_Adoption::PAGE_SIZE + 2 === count( $GLOBALS['adopted'] ) && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'the next request drains the queue' );
-reset_state( array( new WC_Order( 12, 'rdr_a', 'ctx_busy' ), new WC_Order( 13, 'rdr_a', 'ctx_free' ) ), 13 );
-\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( 12 );
-Legacy_Adoption::upgrade();
-expect( array( 'rdr_a:ctx_free' ) === array_column( $GLOBALS['adopted'], 2 ) && array( 12 => 'rdr_a:ctx_busy' ) === $GLOBALS['options']['sutwc_adoption_queue'] && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a held lock keeps its order queued and the pass open' );
+expect( array( 50 => array( 'tries' => 0, 'next_at' => 1000000 + Legacy_Adoption::LOOKUP_BACKOFF[0] ) ) === $GLOBALS['options']['sutwc_completion_queue'], 'queueing is idempotent and keeps the first delay' );
+$GLOBALS['options']['sutwc_completion_queue'][51] = array( 'tries' => 0, 'next_at' => 1000000 ); // another request queued this meanwhile
+$GLOBALS['by_id'][51] = new WC_Order( 51, '', 'ctx_other', 'PAID' );
+Legacy_Adoption::complete_recorded_page();
+expect( array( 51 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 50 ) === array_keys( $GLOBALS['options']['sutwc_completion_queue'] ), 'a due entry is completed, one not yet due is kept' );
+$GLOBALS['now'] = 1000000 + Legacy_Adoption::LOOKUP_BACKOFF[0];
+Legacy_Adoption::complete_recorded_page();
+expect( array( 51, 50 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a queued order is completed once due, after the pass is over' );
 
 // 5. Once the version is recorded, nothing runs.
 reset_state( array( new WC_Order( 14, 'rdr_a', 'ctx_late' ) ), 14 );
