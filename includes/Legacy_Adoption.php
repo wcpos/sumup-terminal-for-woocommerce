@@ -191,6 +191,9 @@ final class Legacy_Adoption {
 			$orders = wc_get_orders(
 				array(
 					'type'       => 'shop_order',
+					// Only orders still waiting for payment: a completed sale keeps these meta values
+					// for good, and a store's whole SumUp history must not be read on every upgrade.
+					'status'     => array( 'pending', 'failed' ),
 					'limit'      => -1,
 					'orderby'    => 'ID',
 					'order'      => 'ASC',

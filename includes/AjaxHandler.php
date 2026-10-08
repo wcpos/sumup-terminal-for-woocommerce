@@ -336,9 +336,11 @@ class AjaxHandler {
 	 * upgrade whose form submit never landed.
 	 *
 	 * @param \WC_Order $order Order.
-	 * @return bool|\WP_Error True when completed here; false when SumUp answered and the attempt
-	 *                        is not a confirmed success (final); WP_Error `sutwc_lookup_unavailable`
-	 *                        when SumUp could not be asked (retryable).
+	 * @return bool|\WP_Error True when completed here; false when SumUp's record of this attempt is
+	 *                        final and not a success (FAILED or CANCELLED); WP_Error
+	 *                        `sutwc_lookup_unavailable` when SumUp could not be asked, or its answer
+	 *                        is not yet final (PENDING, no record, a record for another attempt),
+	 *                        so it is asked again later (retryable).
 	 */
 	public function complete_recorded_attempt( $order ) {
 		if ( $order->is_paid() || ! $order->needs_payment() ) {
@@ -362,9 +364,20 @@ class AjaxHandler {
 		}
 		$response_id = is_array( $lookup ) ? (string) ( $lookup['client_transaction_id'] ?? '' ) : '';
 		$status      = is_array( $lookup ) ? strtoupper( (string) ( $lookup['status'] ?? '' ) ) : '';
-		if ( '' === $response_id || ! hash_equals( $client_id, $response_id ) || 'SUCCESSFUL' !== $status ) {
-			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup did not confirm it; the order stays unpaid.' );
+		if ( '' === $response_id || ! hash_equals( $client_id, $response_id ) ) {
+			// No record of this attempt yet (SumUp lists a transaction a little after its delivery)
+			// is not SumUp saying no.
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup has no record of it yet; it is asked again later.' );
+			return new \WP_Error( 'sutwc_lookup_unavailable', 'SumUp has no record of the transaction yet.' );
+		}
+		if ( 'FAILED' === $status || 'CANCELLED' === $status ) {
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup reports ' . $status . '; the order stays unpaid.' );
 			return false;
+		}
+		if ( 'SUCCESSFUL' !== $status ) {
+			// PENDING, or a status this plugin does not know: not final.
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup reports ' . $status . ', which is not final; it is asked again later.' );
+			return new \WP_Error( 'sutwc_lookup_unavailable', 'SumUp has not finalised the transaction yet.' );
 		}
 		$order->payment_complete( $client_id );
 		$order->add_order_note( __( 'Payment completed from the SumUp result for an attempt started on the previous order-pay panel.', 'sumup-terminal-for-woocommerce' ) );

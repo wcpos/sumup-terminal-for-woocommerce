@@ -72,18 +72,21 @@ $method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.upda
 expect( array() === $adopted->completed, 'an order adopted between the check and the lock is left to Pro' );
 $GLOBALS['adopted_map'] = array();
 
-// A successful delivery the lookup does not confirm: nothing is completed.
-foreach ( array( array( 'client_transaction_id' => 'ctx_1', 'status' => 'PENDING' ), array( 'client_transaction_id' => 'ctx_other', 'status' => 'SUCCESSFUL' ), null ) as $lookup ) {
-	$handler->lookup = $lookup;
+// A successful delivery SumUp's record contradicts (FAILED or CANCELLED on the matching id): nothing
+// is completed, and SumUp's final answer is not asked about again.
+foreach ( array( 'FAILED', 'CANCELLED' ) as $status ) {
+	$GLOBALS['options'] = array();
+	$handler->lookup = array( 'client_transaction_id' => 'ctx_1', 'status' => $status );
 	$order = new WC_Order(); $GLOBALS['fresh'] = $order;
 	$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
 	expect( array() === $order->completed, 'the unsigned delivery alone never completes an order' );
 	expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a definite answer from SumUp is final: nothing is queued' );
 }
 
-// SumUp could not be asked (transport error, no merchant code): nothing is completed, and the
-// order is handed to the pass to be asked about again.
-foreach ( array( false, new WP_Error( 'sumup_api_error', 'down' ) ) as $lookup ) {
+// SumUp's answer is not final (PENDING just after the delivery, a status this plugin does not know,
+// a record for another attempt, no record), or SumUp could not be asked (transport error, no
+// merchant code): nothing is completed, and the order is handed to the sweep to be asked about again.
+foreach ( array( array( 'client_transaction_id' => 'ctx_1', 'status' => 'PENDING' ), array( 'client_transaction_id' => 'ctx_1', 'status' => 'REVIEW' ), array( 'client_transaction_id' => 'ctx_other', 'status' => 'SUCCESSFUL' ), array( 'status' => 'SUCCESSFUL' ), null, false, new WP_Error( 'sumup_api_error', 'down' ) ) as $lookup ) {
 	$GLOBALS['options'] = array();
 	$handler->lookup = $lookup;
 	$order = new WC_Order(); $GLOBALS['fresh'] = $order;
