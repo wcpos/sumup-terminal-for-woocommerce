@@ -22,6 +22,10 @@ if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return 
 if ( ! function_exists( '__' ) ) { function __( $text, $domain = '' ) { return $text; } }
 function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
 function wc_get_order( $id ) { return $GLOBALS['fresh']; }
+function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; }
+function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; }
+function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; }
+$GLOBALS['options'] = array();
 $GLOBALS['adopted_map'] = array();
 
 class WC_Order {
@@ -74,7 +78,19 @@ foreach ( array( array( 'client_transaction_id' => 'ctx_1', 'status' => 'PENDING
 	$order = new WC_Order(); $GLOBALS['fresh'] = $order;
 	$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
 	expect( array() === $order->completed, 'the unsigned delivery alone never completes an order' );
+	expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a definite answer from SumUp is final: nothing is queued' );
 }
+
+// SumUp could not be asked (transport error, no merchant code): nothing is completed, and the
+// order is handed to the pass to be asked about again.
+foreach ( array( false, new WP_Error( 'sumup_api_error', 'down' ) ) as $lookup ) {
+	$GLOBALS['options'] = array();
+	$handler->lookup = $lookup;
+	$order = new WC_Order(); $GLOBALS['fresh'] = $order;
+	$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
+	expect( array() === $order->completed && array( 42 => 0 ) === $GLOBALS['options']['sutwc_completion_queue'], 'no answer completes nothing and queues the order' );
+}
+$GLOBALS['options'] = array();
 
 // A failed delivery: nothing is completed, whatever the lookup says.
 $handler->lookup = array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' );

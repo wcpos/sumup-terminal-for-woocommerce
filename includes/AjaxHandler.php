@@ -235,8 +235,12 @@ class AjaxHandler {
 		// The old panel's JavaScript completed the order through the form submit once the
 		// status was final; that path is gone, so an attempt Pro did not adopt is completed
 		// here, on SumUp's authenticated word, never on the unsigned delivery alone, and under
-		// the order lock on a fresh read so two deliveries cannot complete it twice.
-		Legacy_Adoption::complete_recorded( (int) $order->get_id(), $this );
+		// the order lock on a fresh read so two deliveries cannot complete it twice. When SumUp
+		// could not be asked, or the lock was held, the pass asks again on a later request.
+		$completed = Legacy_Adoption::complete_recorded( (int) $order->get_id(), $this );
+		if ( is_wp_error( $completed ) ) {
+			Legacy_Adoption::queue_recorded( (int) $order->get_id() );
+		}
 	}
 
 	/**
@@ -332,9 +336,11 @@ class AjaxHandler {
 	 * upgrade whose form submit never landed.
 	 *
 	 * @param \WC_Order $order Order.
-	 * @return bool Whether the order was completed here.
+	 * @return bool|\WP_Error True when completed here; false when SumUp answered and the attempt
+	 *                        is not a confirmed success (final); WP_Error `sutwc_lookup_unavailable`
+	 *                        when SumUp could not be asked (retryable).
 	 */
-	public function complete_recorded_attempt( $order ): bool {
+	public function complete_recorded_attempt( $order ) {
 		if ( $order->is_paid() || ! $order->needs_payment() ) {
 			return false;
 		}
@@ -345,15 +351,19 @@ class AjaxHandler {
 			return false;
 		}
 		try {
-			$lookup      = $this->lookup_transaction( $client_id );
-			$response_id = is_array( $lookup ) ? (string) ( $lookup['client_transaction_id'] ?? '' ) : '';
-			$status      = is_array( $lookup ) ? strtoupper( (string) ( $lookup['status'] ?? '' ) ) : '';
-			if ( '' === $response_id || ! hash_equals( $client_id, $response_id ) || 'SUCCESSFUL' !== $status ) {
-				Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup did not confirm it; the order stays unpaid.' );
-				return false;
-			}
+			$lookup = $this->lookup_transaction( $client_id );
 		} catch ( Exception $e ) {
-			Logger::log( 'SumUp: transaction lookup failed for order ' . $order->get_id() . ': ' . $e->getMessage() );
+			$lookup = new \WP_Error( 'sumup_api_error', $e->getMessage() );
+		}
+		// No answer (transport, 5xx, a missing key or merchant code) is not SumUp saying no.
+		if ( false === $lookup || is_wp_error( $lookup ) ) {
+			Logger::log( 'SumUp: transaction lookup for order ' . $order->get_id() . ' got no answer' . ( is_wp_error( $lookup ) ? ': ' . $lookup->get_error_message() : '' ) . '; it is asked again later.' );
+			return new \WP_Error( 'sutwc_lookup_unavailable', 'SumUp could not be asked about the transaction.' );
+		}
+		$response_id = is_array( $lookup ) ? (string) ( $lookup['client_transaction_id'] ?? '' ) : '';
+		$status      = is_array( $lookup ) ? strtoupper( (string) ( $lookup['status'] ?? '' ) ) : '';
+		if ( '' === $response_id || ! hash_equals( $client_id, $response_id ) || 'SUCCESSFUL' !== $status ) {
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup did not confirm it; the order stays unpaid.' );
 			return false;
 		}
 		$order->payment_complete( $client_id );

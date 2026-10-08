@@ -13,6 +13,8 @@ final class Legacy_Adoption {
 	public const VERSION = '1.0.0';
 	/** Candidates per `init` request; keeps the admin request that triggers it short. */
 	public const PAGE_SIZE = 25;
+	/** Requests a recorded success is asked about again when SumUp gives no answer. */
+	public const MAX_LOOKUP_TRIES = 5;
 	/** Provider family, as SumUp_Server_Provider::provider() reports it. */
 	public const PROVIDER = 'sumup';
 	/** The old panel's checkout status; `PENDING` once the reader has the checkout. */
@@ -59,6 +61,9 @@ final class Legacy_Adoption {
 	/** Run the next page of adoption, until every candidate snapshotted at the start has been seen. */
 	public static function upgrade(): void {
 		if ( version_compare( (string) get_option( 'sutwc_adoption_version', '0' ), self::VERSION, '>=' ) ) {
+			// The adoption pass is over; recorded successes are still asked about whenever the
+			// queue holds any, since the webhook hands an order here when SumUp could not be asked.
+			self::complete_recorded_page();
 			return;
 		}
 		// The candidates are snapshotted once, as id => action reference, when the pass begins:
@@ -81,14 +86,16 @@ final class Legacy_Adoption {
 			foreach ( $candidates as $order ) {
 				$ref = self::action_ref( $order );
 				// An attempt without a start time predates the marker (v0.0.10); the provider could
-				// never confirm it finished, so it is not adopted. It is months old by now, and a
-				// paid one is caught by the recorded-success pass below.
+				// never confirm it finished, so it is not adopted. It is months old by now; one whose
+				// result the old panel recorded is caught by the recorded-success pass below.
 				if ( '' !== $ref && (int) $order->get_meta( self::META_STARTED ) > 0 && ! $order->is_paid() && $order->needs_payment() ) {
 					$queue[ $order->get_id() ] = $ref;
 				}
 			}
 			update_option( 'sutwc_adoption_queue', $queue, false );
-			update_option( 'sutwc_completion_queue', self::recorded_successes(), false );
+			foreach ( self::recorded_successes() as $order_id ) {
+				self::queue_recorded( $order_id );
+			}
 		}
 		$page = array_slice( $queue, 0, self::PAGE_SIZE, true );
 		foreach ( $page as $order_id => $ref ) {
@@ -124,11 +131,24 @@ final class Legacy_Adoption {
 			unset( $queue[ $order_id ] );
 		}
 		update_option( 'sutwc_adoption_queue', $queue, false );
-		$completions = self::complete_recorded_page();
-		if ( array() === $queue && array() === $completions ) {
+		if ( array() === $queue ) {
 			delete_option( 'sutwc_adoption_queue' );
-			delete_option( 'sutwc_completion_queue' );
 			update_option( 'sutwc_adoption_version', self::VERSION, false );
+		}
+		self::complete_recorded_page();
+	}
+
+	/**
+	 * Queue an order whose recorded success is to be completed on SumUp's word.
+	 *
+	 * @param int $order_id Order id.
+	 */
+	public static function queue_recorded( int $order_id ): void {
+		$queue = get_option( 'sutwc_completion_queue', array() );
+		$queue = is_array( $queue ) ? $queue : array();
+		if ( ! isset( $queue[ $order_id ] ) ) {
+			$queue[ $order_id ] = 0;
+			update_option( 'sutwc_completion_queue', $queue, false );
 		}
 	}
 
@@ -163,25 +183,37 @@ final class Legacy_Adoption {
 
 	/**
 	 * Complete one page of recorded successes, each under the order lock on SumUp's word.
-	 *
-	 * @return int[] What is left of the completion queue.
+	 * The queue maps order id to the number of requests on which SumUp gave no answer; an
+	 * order leaves it on a definite answer, on completion, or after MAX_LOOKUP_TRIES silences.
 	 */
-	private static function complete_recorded_page(): array {
+	private static function complete_recorded_page(): void {
 		$queue = get_option( 'sutwc_completion_queue', array() );
 		if ( ! is_array( $queue ) || array() === $queue ) {
-			return array();
+			return;
 		}
 		$handler = new AjaxHandler();
-		foreach ( array_slice( $queue, 0, self::PAGE_SIZE ) as $order_id ) {
+		foreach ( array_slice( $queue, 0, self::PAGE_SIZE, true ) as $order_id => $tries ) {
 			$result = self::complete_recorded( (int) $order_id, $handler );
-			if ( is_wp_error( $result ) && in_array( $result->get_error_code(), array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {
-				Logger::log( 'Legacy SumUp completion deferred for order ' . $order_id . ': ' . $result->get_error_code() );
-				continue;
+			if ( is_wp_error( $result ) ) {
+				$code = $result->get_error_code();
+				if ( in_array( $code, array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {
+					// A held lock is a till at work on that order: it stays queued, untouched.
+					continue;
+				}
+				if ( 'sutwc_lookup_unavailable' === $code && (int) $tries + 1 < self::MAX_LOOKUP_TRIES ) {
+					// SumUp could not be asked: ask again on a later request.
+					$queue[ $order_id ] = (int) $tries + 1;
+					continue;
+				}
+				Logger::log( 'Legacy SumUp completion gave up on order ' . $order_id . ': ' . $code );
 			}
-			$queue = array_values( array_diff( $queue, array( $order_id ) ) );
+			unset( $queue[ $order_id ] );
+		}
+		if ( array() === $queue ) {
+			delete_option( 'sutwc_completion_queue' );
+			return;
 		}
 		update_option( 'sutwc_completion_queue', $queue, false );
-		return $queue;
 	}
 
 	/**

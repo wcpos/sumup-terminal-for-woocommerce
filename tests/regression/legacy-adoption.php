@@ -7,8 +7,13 @@
 namespace WCPOS\WooCommercePOS\SumUpTerminal {
 	class AjaxHandler {
 		public static $completed = array();
+		public static $answers   = array(); // order id => true | false | 'silent'
 		public function __construct() {}
-		public function complete_recorded_attempt( $order ) { self::$completed[] = $order->get_id(); return true; }
+		public function complete_recorded_attempt( $order ) {
+			self::$completed[] = $order->get_id();
+			$answer = self::$answers[ $order->get_id() ] ?? true;
+			return 'silent' === $answer ? new \WP_Error( 'sutwc_lookup_unavailable', 'no answer' ) : $answer;
+		}
 	}
 }
 
@@ -84,6 +89,7 @@ function reset_state( array $page, int $newest, array $fresh = array() ) {
 	$GLOBALS['queries']     = array();
 	$GLOBALS['recorded']    = array();
 	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed = array();
+	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$answers   = array();
 	\WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider::$marked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
@@ -139,7 +145,34 @@ $GLOBALS['recorded'] = array( 'PAID' => array( new WC_Order( 33, '', 'ctx_busy2'
 $GLOBALS['by_id']    = array( 33 => $GLOBALS['recorded']['PAID'][0] );
 \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( 33 );
 Legacy_Adoption::upgrade();
-expect( array() === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 33 ) === $GLOBALS['options']['sutwc_completion_queue'] && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a held lock keeps the recorded success queued and the pass open' );
+expect( array() === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 33 => 0 ) === $GLOBALS['options']['sutwc_completion_queue'], 'a held lock keeps the recorded success queued' );
+
+// 1d. SumUp silent: the order is asked about again on later requests, up to the bound, then dropped;
+//     a definite no drops it at once. The queue keeps working after the adoption pass is over.
+reset_state( array(), 0 );
+$silent = new WC_Order( 40, '', 'ctx_silent', 'PAID' ); $no = new WC_Order( 41, '', 'ctx_no', 'PAID' );
+$GLOBALS['recorded'] = array( 'PAID' => array( $silent, $no ) );
+$GLOBALS['by_id']    = array( 40 => $silent, 41 => $no );
+\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$answers = array( 40 => 'silent', 41 => false );
+Legacy_Adoption::upgrade();
+expect( array( 40 => 1 ) === $GLOBALS['options']['sutwc_completion_queue'], 'no answer keeps the order queued with one try counted; a definite no drops it' );
+expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'the adoption pass itself is over' );
+for ( $i = 1; $i < Legacy_Adoption::MAX_LOOKUP_TRIES - 1; $i++ ) { Legacy_Adoption::upgrade(); }
+expect( array( 40 => Legacy_Adoption::MAX_LOOKUP_TRIES - 1 ) === $GLOBALS['options']['sutwc_completion_queue'], 'each silent request counts a try' );
+Legacy_Adoption::upgrade();
+expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'after the bound the order is dropped and the queue cleared' );
+expect( Legacy_Adoption::MAX_LOOKUP_TRIES === count( array_keys( \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed, 40, true ) ), 'SumUp was asked exactly MAX_LOOKUP_TRIES times' );
+
+// 1e. The webhook hands an order it could not ask about to the queue; a later request completes it.
+reset_state( array(), 0 );
+$GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
+$late = new WC_Order( 50, '', 'ctx_late_ok', 'PAID' );
+$GLOBALS['by_id'] = array( 50 => $late );
+Legacy_Adoption::queue_recorded( 50 );
+Legacy_Adoption::queue_recorded( 50 );
+expect( array( 50 => 0 ) === $GLOBALS['options']['sutwc_completion_queue'], 'queueing is idempotent' );
+Legacy_Adoption::upgrade();
+expect( array( 50 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a queued order is completed on a later request even after the pass is over' );
 
 // 2. The queue is a snapshot: an attempt the old panel starts after the pass began is never a
 //    candidate, and a candidate whose reference changed (a retry) is skipped inside the lock.
