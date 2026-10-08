@@ -55,7 +55,7 @@ jobs:
         if: matrix.php == '8.3'
         run: composer install --no-interaction --prefer-dist
 
-      - name: PHPCS (files owned by the 1.11 server-mode landing)
+      - name: PHPCS (files owned by the 2.0 server-mode landing)
         if: matrix.php == '8.3'
         # The legacy files carry pre-existing PHPCS debt (139 errors on `next` at 2026-09-09); they are
         # linted when they are cleaned up, not here, so this check reflects the code this lane owns.

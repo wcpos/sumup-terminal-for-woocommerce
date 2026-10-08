@@ -68,7 +68,9 @@ spl_autoload_register(
  */
 function sutwc_activate(): void {
 	if ( PHP_VERSION_ID >= SUTWC_MINIMUM_PHP_VERSION_ID ) {
-		Server\Registration::activation_check( __FILE__ );
+		if ( \function_exists( 'wcpos_pro_requires' ) ) {
+			wcpos_pro_requires( Server\Registration::REQUIRED_PRO_VERSION, __FILE__ );
+		}
 		return;
 	}
 
@@ -93,13 +95,28 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\sutwc_activate' );
  * Initialize the plugin.
  */
 function init(): void {
+	// Terminal extensions are Pro-only at 2.0: the keypad modes and the order-pay panel both
+	// rely on Pro's shared payments base.
+	if ( ! \function_exists( 'wcpos_pro_requires' ) || ! wcpos_pro_requires( Server\Registration::REQUIRED_PRO_VERSION, __FILE__ ) ) {
+		add_action(
+			'admin_notices',
+			static function (): void {
+				echo '<div class="notice notice-error"><p>' . esc_html__( 'SumUp Terminal for WooCommerce needs WooCommerce POS Pro 2.0.0 or newer.', 'sumup-terminal-for-woocommerce' ) . '</p></div>';
+			}
+		);
+		return;
+	}
+
 	// Register the gateway.
 	add_filter( 'woocommerce_payment_gateways', array( Gateway::class, 'register_gateway' ) );
+
+	// The keypad's server and device modes, on Pro's shared base.
+	Server\Registration::register();
 
 	// Initialize AJAX handlers early.
 	new AjaxHandler();
 }
-add_action( 'plugins_loaded', __NAMESPACE__ . '\init', 11 );
-
-add_action( 'plugins_loaded', array( Server\Registration::class, 'register' ), 30 );
-add_action( 'plugins_loaded', array( Server\Pos_Reader_Settings::class, 'migrate_once' ), 30 );
+// Pro defines wcpos_pro_requires() and the provider registration API from its own
+// plugins_loaded hook at priority 20; the gate must run after that.
+add_action( 'plugins_loaded', __NAMESPACE__ . '\init', 30 );
+add_action( 'plugins_loaded', array( Server\Pos_Reader_Settings::class, 'migrate_once' ), 31 );

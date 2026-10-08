@@ -104,17 +104,6 @@ class Gateway extends WC_Payment_Gateway {
 	 */
 	public function init_form_fields(): void {
 		$this->form_fields = array(
-			'enabled' => array(
-				'title'       => __( 'Enable/Disable', 'sumup-terminal-for-woocommerce' ),
-				'type'        => 'checkbox',
-				'label'       => \sprintf(
-					// Translators: Placeholders %s is the link to WooCommerce POS.
-					__( 'Enable SumUp Terminal for web checkout (not necessary for %s)', 'sumup-terminal-for-woocommerce' ),
-					'<a href="https://wcpos.com" target="_blank">WooCommerce POS</a>'
-				),
-				'description' => __( 'This enables the gateway for online store checkout. The POS uses this gateway automatically when configured.', 'sumup-terminal-for-woocommerce' ),
-				'default'     => 'no',
-			),
 			'title' => array(
 				'title'       => __( 'Title', 'sumup-terminal-for-woocommerce' ),
 				'type'        => 'text',
@@ -267,6 +256,23 @@ class Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
+	 * SumUp Terminal is a POS gateway: it is offered on POS requests and on the order-pay page
+	 * a POS user opens, never on the shop checkout. The saved `enabled` option is not consulted,
+	 * so a site that once enabled web checkout does not keep it.
+	 *
+	 * @return bool
+	 */
+	public function is_available() {
+		if ( empty( $this->api_key ) ) {
+			return false;
+		}
+		if ( \function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) {
+			return true;
+		}
+		return \function_exists( 'is_checkout_pay_page' ) && is_checkout_pay_page() && current_user_can( 'access_woocommerce_pos' );
+	}
+
+	/**
 	 * Register the gateway with WooCommerce.
 	 *
 	 * @param array $methods Existing payment methods.
@@ -286,7 +292,7 @@ class Gateway extends WC_Payment_Gateway {
 		parent::admin_options();
 
 		echo wp_kses_post( $this->get_sdk_status_html() );
-		$pos_checkout = __( 'Requires WooCommerce POS Pro 1.11.0 or newer (legacy checkout only)', 'sumup-terminal-for-woocommerce' );
+		$pos_checkout = __( 'Requires WooCommerce POS Pro 2.0.0 or newer.', 'sumup-terminal-for-woocommerce' );
 		if ( Server\Registration::pro_supported() ) {
 			/* translators: %s: result webhook URL pattern, with a payment row placeholder. */
 			$pos_checkout = sprintf( __( 'Enabled — result webhook: %s', 'sumup-terminal-for-woocommerce' ), Server\SumUp_Server_Provider::webhook_url( '<row id>' ) );
@@ -398,7 +404,7 @@ class Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Payment fields displayed during checkout or order-pay page.
+	 * Payment fields displayed on the POS order-pay page.
 	 */
 	public function payment_fields(): void {
 		global $wp;
@@ -436,14 +442,8 @@ class Gateway extends WC_Payment_Gateway {
 			return;
 		}
 
-		// Check if we're on the order-pay page.
-		if ( is_checkout_pay_page() ) {
-			// Extract the order ID from the URL.
-			$order_id = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
-		} else {
-			// Default behavior for the main checkout page.
-			$order_id = null;
-		}
+		// The panel only renders on the order-pay page.
+		$order_id  = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
 		$order     = $order_id ? wc_get_order( $order_id ) : false;
 		$order_key = $order ? $order->get_order_key() : '';
 
@@ -591,8 +591,8 @@ class Gateway extends WC_Payment_Gateway {
 	 * Enqueue payment scripts for the checkout interface.
 	 */
 	public function enqueue_payment_scripts(): void {
-		// Only load on checkout pages or when our gateway is selected.
-		if ( ! is_checkout() && ! is_checkout_pay_page() ) {
+		// The panel lives on the order-pay page only.
+		if ( ! is_checkout_pay_page() ) {
 			return;
 		}
 
@@ -615,11 +615,7 @@ class Gateway extends WC_Payment_Gateway {
 			true
 		);
 
-		// Check if we're on the order-pay page to get order ID.
-		$order_id = null;
-		if ( is_checkout_pay_page() ) {
-			$order_id = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
-		}
+		$order_id = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
 
 		// Localize script data for payment interface (nonce will be added in payment_fields).
 		wp_localize_script(
