@@ -25,14 +25,6 @@ class AjaxHandler {
 			add_action( 'wp_ajax_sumup_pair_reader', array( $this, 'ajax_pair_reader' ) );
 			add_action( 'wp_ajax_sumup_unpair_reader', array( $this, 'ajax_unpair_reader' ) );
 			
-			// Payment AJAX handlers (available to both admin and frontend users)
-			add_action( 'wp_ajax_sumup_create_checkout', array( $this, 'ajax_create_checkout' ) );
-			add_action( 'wp_ajax_nopriv_sumup_create_checkout', array( $this, 'ajax_create_checkout' ) );
-			add_action( 'wp_ajax_sumup_cancel_checkout', array( $this, 'ajax_cancel_checkout' ) );
-			add_action( 'wp_ajax_nopriv_sumup_cancel_checkout', array( $this, 'ajax_cancel_checkout' ) );
-			add_action( 'wp_ajax_sumup_check_payment_status', array( $this, 'ajax_check_payment_status' ) );
-			add_action( 'wp_ajax_nopriv_sumup_check_payment_status', array( $this, 'ajax_check_payment_status' ) );
-			
 			// Webhook handler (accessible to external servers)
 			add_action( 'wp_ajax_sumup_webhook', array( $this, 'ajax_webhook' ) );
 			add_action( 'wp_ajax_nopriv_sumup_webhook', array( $this, 'ajax_webhook' ) );
@@ -119,314 +111,6 @@ class AjaxHandler {
 	}
 
 	/**
-	 * AJAX handler for creating a reader checkout.
-	 */
-	public function ajax_create_checkout(): void {
-		// Skip nonce validation for POS environment due to user context switching
-		// Instead, verify that this is a valid AJAX request and has required parameters
-		if ( ! wp_doing_ajax() ) {
-			wp_send_json_error( __( 'Invalid request', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Payment AJAX intentionally supports the POS environment.
-		$reader_id = sanitize_text_field( wp_unslash( $_POST['reader_id'] ?? '' ) );
-		$order_id  = absint( $_POST['order_id'] ?? 0 );
-		$order_key = sanitize_text_field( wp_unslash( $_POST['order_key'] ?? '' ) );
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-
-		if ( empty( $reader_id ) ) {
-			wp_send_json_error( __( 'Reader ID is required', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		if ( empty( $order_id ) ) {
-			wp_send_json_error( __( 'Order ID is required', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		// Get the order
-		$order = wc_get_order( $order_id );
-		if ( ! $order ) {
-			wp_send_json_error( __( 'Invalid order', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		if ( empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) {
-			wp_send_json_error( __( 'Invalid order key', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		$prior_checkout    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
-		$prior_transaction = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
-		$failed_statuses   = array( 'FAILED', 'CANCELLED', 'TIMEOUT', 'EXPIRED' );
-		if ( 'PAID' === $prior_checkout || 'SUCCESSFUL' === $prior_transaction || ! $order->needs_payment() ) {
-			wp_send_json_error( __( 'This order no longer needs payment.', 'sumup-terminal-for-woocommerce' ) );
-		}
-		if (
-			( ! empty( $prior_checkout ) || ! empty( $prior_transaction ) )
-			&& ! in_array( $prior_checkout, $failed_statuses, true )
-			&& ! in_array( $prior_transaction, $failed_statuses, true )
-		) {
-			wp_send_json_error( __( 'A SumUp payment is already active for this order.', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		try {
-			$services = $this->get_services();
-
-			// Remove final state from a previous attempt before starting a retry.
-			$order->delete_meta_data( '_sumup_checkout_status' );
-			$order->delete_meta_data( '_sumup_checkout_updated' );
-			$order->delete_meta_data( '_sumup_transaction_status' );
-			$order->delete_meta_data( '_sumup_transaction_updated' );
-			$order->delete_meta_data( '_sumup_transaction_checked_at' );
-			$order->set_transaction_id( '' );
-			$order->update_meta_data( '_sumup_checkout_status', 'CREATING' );
-			$order->update_meta_data( '_sumup_reader_id', $reader_id );
-			$order->update_meta_data( '_sumup_attempt_started', time() );
-			$order->save();
-
-			// Create checkout on specific reader - ReaderService will handle checkout_data construction
-			$result = $services['reader']->create_checkout_for_order( $order, $reader_id );
-
-			if ( $result ) {
-				// Extract transaction ID from SumUp API response
-				$transaction_id = null;
-				if ( isset( $result['data']['client_transaction_id'] ) ) {
-					$transaction_id = $result['data']['client_transaction_id'];
-				}
-
-				// Store the transaction ID for this order
-				if ( $transaction_id ) {
-					$order->set_transaction_id( $transaction_id );
-					Logger::log( 'SumUp transaction ID saved: ' . $transaction_id . ' for order: ' . $order_id );
-				}
-				$order->update_meta_data( '_sumup_checkout_status', 'PENDING' );
-				$order->save();
-
-				wp_send_json_success( array(
-					'message'        => __( 'Payment started successfully. Please follow instructions on the card reader.', 'sumup-terminal-for-woocommerce' ),
-					'transaction_id' => $transaction_id,
-					'reader_id'      => $reader_id,
-				) );
-			} else {
-				$order->delete_meta_data( '_sumup_checkout_status' );
-				$order->delete_meta_data( '_sumup_reader_id' );
-				$order->save();
-				wp_send_json_error( __( 'Failed to start payment on reader', 'sumup-terminal-for-woocommerce' ) );
-			}
-		} catch ( Exception $e ) {
-			$order->delete_meta_data( '_sumup_checkout_status' );
-			$order->delete_meta_data( '_sumup_reader_id' );
-			$order->save();
-			Logger::log( 'Reader checkout creation failed: ' . $e->getMessage() );
-			wp_send_json_error( __( 'Failed to start payment. Please try again.', 'sumup-terminal-for-woocommerce' ) );
-		}
-	}
-
-	/**
-	 * AJAX handler for cancelling a reader checkout.
-	 */
-	public function ajax_cancel_checkout(): void {
-		// Skip nonce validation for POS environment due to user context switching
-		// Instead, verify that this is a valid AJAX request and has required parameters
-		if ( ! wp_doing_ajax() ) {
-			wp_send_json_error( __( 'Invalid request', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Payment AJAX intentionally supports the POS environment.
-		$reader_id = sanitize_text_field( wp_unslash( $_POST['reader_id'] ?? '' ) );
-		$order_id  = absint( $_POST['order_id'] ?? 0 );
-		$order_key = sanitize_text_field( wp_unslash( $_POST['order_key'] ?? '' ) );
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-
-		if ( empty( $reader_id ) ) {
-			wp_send_json_error( __( 'Reader ID is required', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		$order = wc_get_order( $order_id );
-		if (
-			! $order
-			|| empty( $order_key )
-			|| ! hash_equals( $order->get_order_key(), $order_key )
-			|| ! hash_equals( (string) $order->get_meta( '_sumup_reader_id' ), $reader_id )
-		) {
-			wp_send_json_error( __( 'Invalid payment context', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		try {
-			$services = $this->get_services();
-
-			// Cancel checkout on reader
-			$result = $services['reader']->cancel_checkout( $reader_id );
-
-			if ( $result ) {
-				wp_send_json_success( array(
-					'message'   => __( 'Cancellation request sent to reader. Please wait for confirmation on the device.', 'sumup-terminal-for-woocommerce' ),
-					'reader_id' => $reader_id,
-				) );
-			} else {
-				wp_send_json_error( __( 'Failed to send cancellation request to reader', 'sumup-terminal-for-woocommerce' ) );
-			}
-		} catch ( Exception $e ) {
-			Logger::log( 'Reader checkout cancellation failed: ' . $e->getMessage() );
-			wp_send_json_error( __( 'Failed to send cancellation request. Please try again.', 'sumup-terminal-for-woocommerce' ) );
-		}
-	}
-
-	/**
-	 * AJAX handler for checking payment status.
-	 */
-	public function ajax_check_payment_status(): void {
-		// Skip nonce validation for POS environment due to user context switching
-		// Instead, verify that this is a valid AJAX request and has required parameters
-		if ( ! wp_doing_ajax() ) {
-			wp_send_json_error( __( 'Invalid request', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Payment AJAX intentionally supports the POS environment.
-		$order_id                = absint( $_POST['order_id'] ?? 0 );
-		$order_key               = sanitize_text_field( wp_unslash( $_POST['order_key'] ?? '' ) );
-		$force_transaction_check = wc_string_to_bool(
-			sanitize_text_field( wp_unslash( $_POST['force_transaction_check'] ?? '' ) )
-		);
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-
-		if ( empty( $order_id ) ) {
-			wp_send_json_error( __( 'Order ID is required', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		// Get the order
-		$order = wc_get_order( $order_id );
-		if ( ! $order ) {
-			wp_send_json_error( __( 'Invalid order', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		if ( empty( $order_key ) || ! hash_equals( $order->get_order_key(), $order_key ) ) {
-			wp_send_json_error( __( 'Invalid order key', 'sumup-terminal-for-woocommerce' ) );
-		}
-
-		// Reconcile pending webhook state against SumUp's authoritative transaction record.
-		$checkout_status    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
-		$transaction_status = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
-		$transaction_id     = (string) $order->get_transaction_id();
-		$services           = null;
-		$final_statuses      = array( 'PAID', 'FAILED', 'CANCELLED', 'TIMEOUT', 'EXPIRED' );
-		$final_transaction_statuses = array( 'SUCCESSFUL', 'FAILED', 'CANCELLED' );
-		$last_transaction_check = (int) $order->get_meta( '_sumup_transaction_checked_at' );
-		$transaction_check_due = ( time() - $last_transaction_check ) >= 5;
-		if (
-			! empty( $transaction_id )
-			&& 'PAID' !== $checkout_status
-			&& ! in_array( $transaction_status, $final_transaction_statuses, true )
-			&& (
-				$transaction_check_due
-				|| $force_transaction_check
-				|| in_array( $checkout_status, $final_statuses, true )
-			)
-		) {
-			try {
-				$order->update_meta_data( '_sumup_transaction_checked_at', time() );
-				$order->save();
-				$services        = $this->get_services();
-				$transaction     = $services['transaction']->get_by_client_transaction_id( $transaction_id );
-				$response_id     = is_array( $transaction ) ? (string) ( $transaction['client_transaction_id'] ?? '' ) : '';
-				$response_status = is_array( $transaction ) ? strtoupper( (string) ( $transaction['status'] ?? '' ) ) : '';
-
-				if (
-					! empty( $response_id )
-					&& hash_equals( $transaction_id, $response_id )
-					&& in_array( $response_status, $final_transaction_statuses, true )
-				) {
-					$transaction_status = $response_status;
-					$order->update_meta_data( '_sumup_transaction_status', $transaction_status );
-					$order->update_meta_data( '_sumup_transaction_updated', gmdate( 'c' ) );
-					$order->delete_meta_data( '_sumup_reader_id' );
-					$order->save();
-				}
-			} catch ( Exception $e ) {
-				Logger::log( 'Transaction status request failed: ' . $e->getMessage() );
-			}
-		}
-
-		if ( 'SUCCESSFUL' === $transaction_status ) {
-			$checkout_status = 'PAID';
-		} elseif ( 'PAID' !== $checkout_status && in_array( $transaction_status, array( 'FAILED', 'CANCELLED' ), true ) ) {
-			$checkout_status = $transaction_status;
-		}
-
-		$reader_status = array();
-		$reader_id      = sanitize_text_field( (string) $order->get_meta( '_sumup_reader_id' ) );
-		$has_active_attempt = ! empty( $checkout_status ) || ! empty( $transaction_status );
-		if ( $has_active_attempt && ! in_array( $checkout_status, $final_statuses, true ) && ! empty( $reader_id ) ) {
-			try {
-				$services        = $services ? $services : $this->get_services();
-				$status_response = $services['reader']->get_status( $reader_id );
-
-				if ( is_array( $status_response ) ) {
-					$reader_status = isset( $status_response['data'] ) && is_array( $status_response['data'] )
-						? $status_response['data']
-						: $status_response;
-				}
-			} catch ( Exception $e ) {
-				Logger::log( 'Reader status request failed: ' . $e->getMessage() );
-			}
-		}
-
-		// If no status is set yet, the payment is still pending
-		if ( empty( $checkout_status ) ) {
-			wp_send_json_success( array(
-				'status'           => 'PENDING',
-				'message'          => __( 'Waiting for payment confirmation...', 'sumup-terminal-for-woocommerce' ),
-				'continue_polling' => true,
-				'reader_status'    => $reader_status,
-			) );
-
-			return;
-		}
-
-		// Handle different statuses
-		switch ( strtoupper( $checkout_status ) ) {
-			case 'PAID':
-				wp_send_json_success( array(
-					'status'           => 'PAID',
-					'message'          => __( 'Payment successful! Processing order...', 'sumup-terminal-for-woocommerce' ),
-					'continue_polling' => false,
-					'submit_form'      => true,
-					'reader_status'    => $reader_status,
-				) );
-
-				break;
-
-			case 'FAILED':
-			case 'CANCELLED':
-			case 'TIMEOUT':
-			case 'EXPIRED':
-				wp_send_json_success( array(
-					'status'  => $checkout_status,
-					'message' => \sprintf(
-						__( 'Payment %s. Please try again.', 'sumup-terminal-for-woocommerce' ),
-						strtolower( $checkout_status )
-					),
-					'continue_polling' => false,
-					'submit_form'      => false,
-					'reader_status'    => $reader_status,
-				) );
-
-				break;
-
-			default:
-				// For other statuses (like PENDING, IN_PROGRESS), continue polling
-				wp_send_json_success( array(
-					'status'  => $checkout_status,
-					'message' => \sprintf(
-						__( 'Payment status: %s', 'sumup-terminal-for-woocommerce' ),
-						$checkout_status
-					),
-					'continue_polling' => true,
-					'reader_status'    => $reader_status,
-				) );
-
-				break;
-		}
-	}
-
-	/**
 	 * AJAX handler for SumUp webhook notifications.
 	 * Processes webhook events from SumUp servers.
 	 */
@@ -505,6 +189,11 @@ class AjaxHandler {
 	 * @param array    $webhook_data The webhook payload.
 	 */
 	private function process_webhook( $order, $webhook_data ): void {
+		if ( Legacy_Adoption::is_adopted_order( $order ) ) {
+			// Pro adopted this attempt on upgrade; its outcome is Pro's to record.
+			Logger::log( 'SumUp Webhook: attempt adopted by WooCommerce POS Pro for order ' . $order->get_id() . '; ignoring.' );
+			return;
+		}
 		$event_type = $webhook_data['event_type'];
 		$payload    = $webhook_data['payload'];
 		$timestamp  = $webhook_data['timestamp'] ?? gmdate( 'c' );
@@ -542,6 +231,16 @@ class AjaxHandler {
 			'processed'  => gmdate( 'c' ),
 		) );
 		$order->save();
+
+		// The old panel's JavaScript completed the order through the form submit once the
+		// status was final; that path is gone, so an attempt Pro did not adopt is completed
+		// here, on SumUp's authenticated word, never on the unsigned delivery alone, and under
+		// the order lock on a fresh read so two deliveries cannot complete it twice. When SumUp
+		// could not be asked, or the lock was held, the pass asks again on a later request.
+		$completed = Legacy_Adoption::complete_recorded( (int) $order->get_id(), $this );
+		if ( is_wp_error( $completed ) ) {
+			Legacy_Adoption::queue_recorded( (int) $order->get_id(), Legacy_Adoption::LOOKUP_BACKOFF[0] );
+		}
 	}
 
 	/**
@@ -629,6 +328,70 @@ class AjaxHandler {
 
 		$order_note = implode( "\n", $note_parts );
 		$order->add_order_note( $order_note );
+	}
+
+	/**
+	 * Complete an order whose old-panel attempt SumUp recorded as successful, on SumUp's
+	 * authenticated word: also run by the upgrade pass for successes recorded before the
+	 * upgrade whose form submit never landed.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return bool|\WP_Error True when completed here; false when SumUp's record of this attempt is
+	 *                        final and not a success (FAILED or CANCELLED); WP_Error
+	 *                        `sutwc_lookup_unavailable` when SumUp could not be asked, or its answer
+	 *                        is not yet final (PENDING, no record, a record for another attempt),
+	 *                        so it is asked again later (retryable).
+	 */
+	public function complete_recorded_attempt( $order ) {
+		if ( $order->is_paid() || ! $order->needs_payment() ) {
+			return false;
+		}
+		$checkout    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
+		$transaction = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
+		$client_id   = (string) $order->get_transaction_id();
+		if ( '' === $client_id || ( 'PAID' !== $checkout && 'SUCCESSFUL' !== $transaction ) ) {
+			return false;
+		}
+		try {
+			$lookup = $this->lookup_transaction( $client_id );
+		} catch ( Exception $e ) {
+			$lookup = new \WP_Error( 'sumup_api_error', $e->getMessage() );
+		}
+		// No answer (transport, 5xx, a missing key or merchant code) is not SumUp saying no.
+		if ( false === $lookup || is_wp_error( $lookup ) ) {
+			Logger::log( 'SumUp: transaction lookup for order ' . $order->get_id() . ' got no answer' . ( is_wp_error( $lookup ) ? ': ' . $lookup->get_error_message() : '' ) . '; it is asked again later.' );
+			return new \WP_Error( 'sutwc_lookup_unavailable', 'SumUp could not be asked about the transaction.' );
+		}
+		$response_id = is_array( $lookup ) ? (string) ( $lookup['client_transaction_id'] ?? '' ) : '';
+		$status      = is_array( $lookup ) ? strtoupper( (string) ( $lookup['status'] ?? '' ) ) : '';
+		if ( '' === $response_id || ! hash_equals( $client_id, $response_id ) ) {
+			// No record of this attempt yet (SumUp lists a transaction a little after its delivery)
+			// is not SumUp saying no.
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup has no record of it yet; it is asked again later.' );
+			return new \WP_Error( 'sutwc_lookup_unavailable', 'SumUp has no record of the transaction yet.' );
+		}
+		if ( 'FAILED' === $status || 'CANCELLED' === $status ) {
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup reports ' . $status . '; the order stays unpaid.' );
+			return false;
+		}
+		if ( 'SUCCESSFUL' !== $status ) {
+			// PENDING, or a status this plugin does not know: not final.
+			Logger::log( 'SumUp: success recorded for order ' . $order->get_id() . ' but the transaction lookup reports ' . $status . ', which is not final; it is asked again later.' );
+			return new \WP_Error( 'sutwc_lookup_unavailable', 'SumUp has not finalised the transaction yet.' );
+		}
+		$order->payment_complete( $client_id );
+		$order->add_order_note( __( 'Payment completed from the SumUp result for an attempt started on the previous order-pay panel.', 'sumup-terminal-for-woocommerce' ) );
+		return true;
+	}
+
+	/**
+	 * SumUp's authenticated record of a client transaction.
+	 *
+	 * @param string $client_id Client transaction id.
+	 * @return array|null|\WP_Error
+	 */
+	protected function lookup_transaction( string $client_id ) {
+		return $this->get_services()['transaction']->get_by_client_transaction_id( $client_id );
 	}
 
 	/**

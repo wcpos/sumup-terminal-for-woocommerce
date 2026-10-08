@@ -33,4 +33,7 @@ never change the order-pay page. SumUp Air is not supported
 by this cloud integration.
 
 The result webhook URL is supplied automatically when a payment starts. The gateway is
-offered on the POS only; it is not a payment method on the shop's checkout.
+offered on the POS only; it is not a payment method on the shop's checkout. The POS Legacy tab
+(the order-pay page) runs through Pro's shared order-pay panel, so a payment taken there is a
+ledger row like a keypad payment. Attempts the previous panel left mid-flight are folded into
+Pro's ledger once on upgrade.
