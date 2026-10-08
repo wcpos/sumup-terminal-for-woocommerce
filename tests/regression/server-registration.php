@@ -37,9 +37,19 @@ expect( array( array( '2.0.0', realpath( __DIR__ . '/../../sumup-terminal-for-wo
 expect( isset( $hooks['admin_notices'] ) && array() === $registered, 'old Pro gets a notice and no gateway' );
 $supported = true;
 $requires_calls = array();
-expect( true === Registration::register(), 'supported Pro registers' );
-expect( array( array( Settings::GATEWAY_ID, SumUp_Server_Provider::class ) ) === $registered, 'correct gateway and adapter' );
-expect( true === Registration::register() && 1 === count( $registered ), 'registration idempotent' );
+if ( ! function_exists( 'add_filter' ) ) {
+	function add_filter( $hook, $callback, $priority = 10 ) { $GLOBALS['hooks'][$hook][$priority][] = $callback; }
+	function wp_doing_ajax() { return false; }
+}
+$hooks = array();
+$registered = array();
+WCPOS\WooCommercePOS\SumUpTerminal\init();
+expect( in_array( array( WCPOS\WooCommercePOS\SumUpTerminal\Gateway::class, 'register_gateway' ), $hooks['woocommerce_payment_gateways'][10] ?? array(), true ), 'supported Pro registers the gateway from init()' );
+expect( array( array( Settings::GATEWAY_ID, SumUp_Server_Provider::class ) ) === $registered, 'supported Pro registers the provider from init()' );
+expect( ! isset( $hooks['admin_notices'] ), 'supported Pro gets no notice' );
+$registered = array();
+expect( true === Registration::register() && array() === $registered, 'registration idempotent after init()' );
+$registered = array( array( Settings::GATEWAY_ID, SumUp_Server_Provider::class ) );
 $supported = false;
 $requires_calls = array();
 call_user_func( $activation );

@@ -404,7 +404,7 @@ class Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Payment fields displayed during checkout or order-pay page.
+	 * Payment fields displayed on the POS order-pay page.
 	 */
 	public function payment_fields(): void {
 		global $wp;
