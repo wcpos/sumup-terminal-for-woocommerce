@@ -223,6 +223,11 @@ class AjaxHandler {
 				break;
 		}
 
+		// The old panel's JavaScript completed the order through the form submit once the
+		// status was final; that path is gone, so an attempt Pro did not adopt is completed
+		// here, on SumUp's authenticated word, never on the unsigned delivery alone.
+		$this->complete_unadopted_attempt( $order );
+
 		// Store the complete webhook data for debugging
 		$order->update_meta_data( '_sumup_last_webhook', array(
 			'event_type' => $event_type,
@@ -328,6 +333,51 @@ class AjaxHandler {
 	 *
 	 * @return bool
 	 */
+	/**
+	 * Complete an order whose old-panel attempt SumUp reports as successful.
+	 *
+	 * Only an attempt Pro did not adopt reaches here (process_webhook() returns earlier for
+	 * an adopted one). The delivery's status is a hint; the transaction is looked up with
+	 * the API key, matched by client transaction id and must be SUCCESSFUL.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	private function complete_unadopted_attempt( $order ): void {
+		if ( $order->is_paid() || ! $order->needs_payment() ) {
+			return;
+		}
+		$checkout    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
+		$transaction = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
+		$client_id   = (string) $order->get_transaction_id();
+		if ( '' === $client_id || ( 'PAID' !== $checkout && 'SUCCESSFUL' !== $transaction ) ) {
+			return;
+		}
+		try {
+			$lookup      = $this->lookup_transaction( $client_id );
+			$response_id = is_array( $lookup ) ? (string) ( $lookup['client_transaction_id'] ?? '' ) : '';
+			$status      = is_array( $lookup ) ? strtoupper( (string) ( $lookup['status'] ?? '' ) ) : '';
+			if ( '' === $response_id || ! hash_equals( $client_id, $response_id ) || 'SUCCESSFUL' !== $status ) {
+				Logger::log( 'SumUp Webhook: success reported for order ' . $order->get_id() . ' but the transaction lookup did not confirm it; the order stays unpaid.' );
+				return;
+			}
+		} catch ( Exception $e ) {
+			Logger::log( 'SumUp Webhook: transaction lookup failed for order ' . $order->get_id() . ': ' . $e->getMessage() );
+			return;
+		}
+		$order->payment_complete( $client_id );
+		$order->add_order_note( __( 'Payment completed from the SumUp result for an attempt started on the previous order-pay panel.', 'sumup-terminal-for-woocommerce' ) );
+	}
+
+	/**
+	 * SumUp's authenticated record of a client transaction.
+	 *
+	 * @param string $client_id Client transaction id.
+	 * @return array|null|\WP_Error
+	 */
+	protected function lookup_transaction( string $client_id ) {
+		return $this->get_services()['transaction']->get_by_client_transaction_id( $client_id );
+	}
+
 	private function webhook_matches_current_attempt( $order, $payload ) {
 		if ( 'CREATING' === strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) ) ) {
 			Logger::log( 'SumUp Webhook: Ignoring an event received during transaction ID handoff.' );

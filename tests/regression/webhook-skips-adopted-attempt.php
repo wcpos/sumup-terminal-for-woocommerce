@@ -26,6 +26,8 @@ class WC_Order {
 	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? 'rdr_a' : ''; }
 	public function get_transaction_id() { return 'ctx_1'; }
 	public function update_meta_data( $key, $value ) { $this->touched = true; }
+	public function is_paid() { return false; }
+	public function needs_payment() { return true; }
 	public function save() {}
 }
 

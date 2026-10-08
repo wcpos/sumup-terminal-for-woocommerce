@@ -36,7 +36,7 @@ if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return 
 if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; } }
 function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; }
 function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; }
-function wc_get_orders( $args ) { return isset( $args['return'] ) ? array( $GLOBALS['newest'] ) : $GLOBALS['page']; }
+function wc_get_orders( $args ) { return $GLOBALS['page']; }
 function wc_get_order( $id ) { return $GLOBALS['fresh'][ $id ] ?? ( $GLOBALS['by_id'][ $id ] ?? false ); }
 function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
 function wcpos_pro_adopt_legacy_attempt( $order, $gateway_id, $ref, $amount, $currency ) { $GLOBALS['adopted'][] = array( $order->get_id(), $gateway_id, $ref, $amount, $currency ); return array( 'id' => 'row' ); }
@@ -67,7 +67,9 @@ function reset_state( array $page, int $newest, array $fresh = array() ) {
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
 }
 
-// 1. Only an attempt in flight is adopted; the reference is reader:client transaction id.
+// 1. The candidates are snapshotted once: PENDING, with reader and client transaction id, on an
+//    order still waiting for payment. Only those are adopted, by reader:client id; an already-adopted
+//    one is skipped inside the lock.
 reset_state( array(
 	new WC_Order( 1, 'rdr_a', 'ctx_live' ),
 	new WC_Order( 2, 'rdr_a', 'ctx_paid', 'PAID', true ),
@@ -80,36 +82,38 @@ $GLOBALS['adopted_map'] = array( 'rdr_b:ctx_adopted' => 'row-6' );
 Legacy_Adoption::upgrade();
 expect( array( array( 1, \WCPOS\WooCommercePOS\SumUpTerminal\Settings::GATEWAY_ID, 'rdr_a:ctx_live', '12.50', 'EUR' ) ) === $GLOBALS['adopted'], 'only the attempt in flight is adopted, by reader:client id' );
 expect( array( 1, 6 ) === \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked, 'the lock is taken before the adopted check is repeated' );
-expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a short page finishes the pass' );
-expect( ! isset( $GLOBALS['options']['sutwc_adoption_offset'] ) && ! isset( $GLOBALS['options']['sutwc_adoption_boundary'] ), 'pass state is cleared' );
+expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a short queue finishes the pass' );
+expect( ! isset( $GLOBALS['options']['sutwc_adoption_queue'] ), 'the queue is cleared' );
 
-// 2. Orders newer than the boundary, or modified after the pass began, are skipped.
-reset_state( array( new WC_Order( 7, 'rdr_a', 'ctx_old' ), new WC_Order( 9, 'rdr_a', 'ctx_new' ) ), 8 );
+// 2. The queue is a snapshot: an attempt the old panel starts after the pass began is never a
+//    candidate, and a candidate whose reference changed (a retry) is skipped inside the lock.
+reset_state( array( new WC_Order( 7, 'rdr_a', 'ctx_old' ) ), 7, array( 7 => new WC_Order( 7, 'rdr_a', 'ctx_retried' ) ) );
 Legacy_Adoption::upgrade();
-expect( array( 'rdr_a:ctx_old' ) === array_column( $GLOBALS['adopted'], 2 ), 'an order newer than the boundary is skipped' );
-reset_state( array( new WC_Order( 3, 'rdr_a', 'ctx_quiet', 'PENDING', false, new DateTimeImmutable( '@900' ) ), new WC_Order( 4, 'rdr_a', 'ctx_retried', 'PENDING', false, new DateTimeImmutable( '@1100' ) ) ), 10 );
-$GLOBALS['options']['sutwc_adoption_boundary'] = 10;
-$GLOBALS['options']['sutwc_adoption_started']  = 1000;
+expect( array() === $GLOBALS['adopted'], 'a retried attempt (new client id) is not adopted under the old reference' );
+reset_state( array( new WC_Order( 8, 'rdr_a', 'ctx_snap' ) ), 8 );
+$GLOBALS['options']['sutwc_adoption_queue'] = array();
 Legacy_Adoption::upgrade();
-expect( array( 'rdr_a:ctx_quiet' ) === array_column( $GLOBALS['adopted'], 2 ), 'an order the old panel touched after the pass began is skipped' );
+expect( array() === $GLOBALS['adopted'] && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a pass whose snapshot is empty finishes without reading live orders' );
 
 // 3. The order is re-read under the lock; a till payment that landed meanwhile stops the adoption.
 reset_state( array( new WC_Order( 11, 'rdr_a', 'ctx_meanwhile' ) ), 11, array( 11 => new WC_Order( 11, 'rdr_a', 'ctx_meanwhile', 'PENDING', true ) ) );
 Legacy_Adoption::upgrade();
 expect( array() === $GLOBALS['adopted'], 'the fresh copy decides' );
 
-// 4. A full page advances the offset; a held lock keeps the page for the next request.
-$page = array(); for ( $i = 1; $i <= Legacy_Adoption::PAGE_SIZE; $i++ ) { $page[] = new WC_Order( $i, 'rdr_a', 'ctx_' . $i, 'PAID', true ); }
+// 4. A full page leaves the rest of the queue for the next request; a held lock keeps its order queued.
+$page = array(); for ( $i = 1; $i <= Legacy_Adoption::PAGE_SIZE + 2; $i++ ) { $page[] = new WC_Order( $i, 'rdr_a', 'ctx_' . $i ); }
 reset_state( $page, 100 );
 Legacy_Adoption::upgrade();
-expect( Legacy_Adoption::PAGE_SIZE === $GLOBALS['options']['sutwc_adoption_offset'] && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a full page advances the offset' );
-reset_state( array( new WC_Order( 12, 'rdr_a', 'ctx_busy' ) ), 12 );
+expect( Legacy_Adoption::PAGE_SIZE === count( $GLOBALS['adopted'] ) && 2 === count( $GLOBALS['options']['sutwc_adoption_queue'] ) && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a full page leaves the remainder queued' );
+Legacy_Adoption::upgrade();
+expect( Legacy_Adoption::PAGE_SIZE + 2 === count( $GLOBALS['adopted'] ) && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'the next request drains the queue' );
+reset_state( array( new WC_Order( 12, 'rdr_a', 'ctx_busy' ), new WC_Order( 13, 'rdr_a', 'ctx_free' ) ), 13 );
 \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( 12 );
 Legacy_Adoption::upgrade();
-expect( array() === $GLOBALS['adopted'] && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ) && ! isset( $GLOBALS['options']['sutwc_adoption_offset'] ), 'a held lock keeps the page for the next request' );
+expect( array( 'rdr_a:ctx_free' ) === array_column( $GLOBALS['adopted'], 2 ) && array( 12 => 'rdr_a:ctx_busy' ) === $GLOBALS['options']['sutwc_adoption_queue'] && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a held lock keeps its order queued and the pass open' );
 
 // 5. Once the version is recorded, nothing runs.
-reset_state( array( new WC_Order( 13, 'rdr_a', 'ctx_late' ) ), 13 );
+reset_state( array( new WC_Order( 14, 'rdr_a', 'ctx_late' ) ), 14 );
 $GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
 Legacy_Adoption::upgrade();
 expect( array() === $GLOBALS['adopted'], 'a finished pass does not run again' );

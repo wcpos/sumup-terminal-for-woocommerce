@@ -11,7 +11,7 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal;
 final class Legacy_Adoption {
 	/** Plugin version this adoption belongs to. */
 	public const VERSION = '1.0.0';
-	/** Orders per `init` request; keeps the admin request that triggers it short. */
+	/** Candidates per `init` request; keeps the admin request that triggers it short. */
 	public const PAGE_SIZE = 25;
 	/** Provider family, as SumUp_Server_Provider::provider() reports it. */
 	public const PROVIDER = 'sumup';
@@ -42,88 +42,67 @@ final class Legacy_Adoption {
 		return '' !== $ref && \function_exists( 'wcpos_pro_payment_id_for_action' ) && null !== wcpos_pro_payment_id_for_action( self::PROVIDER, $ref );
 	}
 
-	/** Run the next page of adoption, until every eligible order has been seen. */
+	/** Run the next page of adoption, until every candidate snapshotted at the start has been seen. */
 	public static function upgrade(): void {
 		if ( version_compare( (string) get_option( 'sutwc_adoption_version', '0' ), self::VERSION, '>=' ) ) {
 			return;
 		}
-		// Only orders that existed when the pass began are candidates; the first request records
-		// the newest order id and the time, and an order the old panel touches after that is
-		// skipped by its modified time.
-		$boundary = (int) get_option( 'sutwc_adoption_boundary', 0 );
-		$started  = (int) get_option( 'sutwc_adoption_started', 0 );
-		if ( 0 === $boundary ) {
-			$started = time();
-			update_option( 'sutwc_adoption_started', $started, false );
-			$latest   = wc_get_orders(
+		// The candidates are snapshotted once, as id => action reference, when the pass begins:
+		// every PENDING attempt with a reader and a client transaction id on an order still
+		// waiting for payment. Paging a live filter by offset would skip rows as webhooks move
+		// orders out of it, and an attempt the old panel starts later is never a candidate.
+		$queue = get_option( 'sutwc_adoption_queue', null );
+		if ( ! is_array( $queue ) ) {
+			$queue = array();
+			$candidates = wc_get_orders(
 				array(
-					'type'    => 'shop_order',
-					'limit'   => 1,
-					'orderby' => 'ID',
-					'order'   => 'DESC',
-					'return'  => 'ids',
+					'type'       => 'shop_order',
+					'limit'      => -1,
+					'orderby'    => 'ID',
+					'order'      => 'ASC',
+					'meta_key'   => self::META_STATUS, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One-off upgrade pass.
+					'meta_value' => 'PENDING', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- One-off upgrade pass.
 				)
 			);
-			$boundary = $latest ? (int) $latest[0] : -1;
-			update_option( 'sutwc_adoption_boundary', $boundary, false );
+			foreach ( $candidates as $order ) {
+				$ref = self::action_ref( $order );
+				if ( '' !== $ref && ! $order->is_paid() && $order->needs_payment() ) {
+					$queue[ $order->get_id() ] = $ref;
+				}
+			}
+			update_option( 'sutwc_adoption_queue', $queue, false );
 		}
-		$offset = (int) get_option( 'sutwc_adoption_offset', 0 );
-		$orders = $boundary < 0 ? array() : wc_get_orders(
-			array(
-				'type'         => 'shop_order',
-				'limit'        => self::PAGE_SIZE,
-				'offset'       => $offset,
-				'orderby'      => 'ID',
-				'order'        => 'ASC',
-				'meta_key'     => self::META_STATUS, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One-off upgrade pass.
-				'meta_value'   => 'PENDING', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- One-off upgrade pass.
-			)
-		);
-		$retry = false;
-		foreach ( $orders as $order ) {
-			$modified = $order->get_date_modified();
-			if ( $order->get_id() > $boundary || ( $modified && $modified->getTimestamp() > $started ) ) {
-				continue;
-			}
-			// An attempt still in flight: the reader has the checkout (PENDING), the old panel
-			// stored SumUp's client transaction id, and the order still waits for payment.
-			$ref = self::action_ref( $order );
-			if ( '' === $ref || $order->is_paid() || ! $order->needs_payment() ) {
-				continue;
-			}
+		$page = array_slice( $queue, 0, self::PAGE_SIZE, true );
+		foreach ( $page as $order_id => $ref ) {
 			$result = self::with_order_lock(
-				$order->get_id(),
-				static function () use ( $order, $ref ) {
-					// The page was loaded before the lock: re-read the order under it, and repeat
-					// the checks on that copy, so a leg a till recorded meanwhile is kept.
-					$fresh = wc_get_order( $order->get_id() );
+				(int) $order_id,
+				static function () use ( $order_id, $ref ) {
+					// Read the order under the lock and repeat the checks on that copy, so a leg a
+					// till recorded meanwhile, or a new attempt, is kept out of the way.
+					$fresh = wc_get_order( (int) $order_id );
 					if ( ! $fresh || self::is_adopted( $ref ) || self::action_ref( $fresh ) !== $ref || 'PENDING' !== strtoupper( (string) $fresh->get_meta( self::META_STATUS ) ) || $fresh->is_paid() || ! $fresh->needs_payment() ) {
 						return null;
 					}
 					return wcpos_pro_adopt_legacy_attempt( $fresh, Settings::GATEWAY_ID, $ref, (string) $fresh->get_total(), $fresh->get_currency() );
 				}
 			);
-			if ( is_wp_error( $result ) ) {
-				// A held lock is a till at work on that order: the page is seen again on the next
+			if ( is_wp_error( $result ) && in_array( $result->get_error_code(), array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {
+				// A held lock is a till at work on that order: it stays in the queue for the next
 				// request. Any other refusal is final for this order and is logged.
-				if ( in_array( $result->get_error_code(), array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {
-					$retry = true;
-				}
-				Logger::log( 'Legacy SumUp adoption failed for order ' . $order->get_id() . ': ' . $result->get_error_code() );
+				Logger::log( 'Legacy SumUp adoption deferred for order ' . $order_id . ': ' . $result->get_error_code() );
+				continue;
 			}
+			if ( is_wp_error( $result ) ) {
+				Logger::log( 'Legacy SumUp adoption failed for order ' . $order_id . ': ' . $result->get_error_code() );
+			}
+			unset( $queue[ $order_id ] );
 		}
-		if ( $retry ) {
-			return;
-		}
-		$last = $orders ? end( $orders ) : null;
-		if ( count( $orders ) < self::PAGE_SIZE || ( $last && $last->get_id() >= $boundary ) ) {
-			delete_option( 'sutwc_adoption_offset' );
-			delete_option( 'sutwc_adoption_boundary' );
-			delete_option( 'sutwc_adoption_started' );
+		if ( array() === $queue ) {
+			delete_option( 'sutwc_adoption_queue' );
 			update_option( 'sutwc_adoption_version', self::VERSION, false );
 			return;
 		}
-		update_option( 'sutwc_adoption_offset', $offset + count( $orders ), false );
+		update_option( 'sutwc_adoption_queue', $queue, false );
 	}
 
 	/**
