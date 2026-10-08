@@ -121,7 +121,7 @@ $q = $GLOBALS['queries'][0];
 expect( -1 === $q['limit'] && '_sumup_checkout_status' === $q['meta_key'] && 'PENDING' === $q['meta_value'] && 'ID' === $q['orderby'], 'the snapshot query selects every PENDING attempt in id order' );
 expect( 3 === count( $GLOBALS['queries'] ), 'the snapshot is taken once: the PENDING attempts and the two recorded-success queries' );
 foreach ( array_slice( $GLOBALS['queries'], 1 ) as $rq ) {
-	expect( array( 'pending', 'failed' ) === $rq['status'] && in_array( $rq['meta_value'], array( 'PAID', 'SUCCESSFUL' ), true ), 'the recorded-success queries read only orders still waiting for payment, never the paid history' );
+	expect( array( 'pending', 'failed', 'pos-open', 'pos-partial' ) === $rq['status'] && in_array( $rq['meta_value'], array( 'PAID', 'SUCCESSFUL' ), true ), 'the recorded-success queries read only orders still waiting for payment, POS open and partial ones included, never the paid history' );
 }
 
 expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a short queue finishes the pass' );

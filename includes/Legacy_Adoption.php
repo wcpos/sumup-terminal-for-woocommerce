@@ -20,6 +20,13 @@ final class Legacy_Adoption {
 	 * not counted.
 	 */
 	public const LOOKUP_BACKOFF = array( 60, 300, 900, 3600, 21600 );
+
+	/**
+	 * Order statuses that still need payment: WooCommerce's own two plus the two Free adds
+	 * through `woocommerce_valid_order_statuses_for_payment` (POS open and partially paid
+	 * orders). `needs_payment()` on the rows read stays the truth.
+	 */
+	public const UNPAID_STATUSES = array( 'pending', 'failed', 'pos-open', 'pos-partial' );
 	/** The sweep that works the completion queue: Free's ten-minute payments sweep. */
 	public const SWEEP_HOOK = 'wcpos_payments_sweep';
 	/** Provider family, as SumUp_Server_Provider::provider() reports it. */
@@ -193,7 +200,7 @@ final class Legacy_Adoption {
 					'type'       => 'shop_order',
 					// Only orders still waiting for payment: a completed sale keeps these meta values
 					// for good, and a store's whole SumUp history must not be read on every upgrade.
-					'status'     => array( 'pending', 'failed' ),
+					'status'     => self::UNPAID_STATUSES,
 					'limit'      => -1,
 					'orderby'    => 'ID',
 					'order'      => 'ASC',
