@@ -224,11 +224,16 @@ final class Legacy_Adoption {
 		$handler = new AjaxHandler();
 		$now     = time();
 		$changes = array(); // order id => new entry, or null to remove.
-		foreach ( array_slice( $queue, 0, self::PAGE_SIZE, true ) as $order_id => $entry ) {
-			$tries = (int) ( $entry['tries'] ?? 0 );
-			if ( (int) ( $entry['next_at'] ?? 0 ) > $now ) {
-				continue;
+		// The page is taken from the entries due now, so entries waiting out a long backoff
+		// at the front of the queue cannot hold back a due one behind them.
+		$due = array_filter(
+			$queue,
+			static function ( $entry ) use ( $now ) {
+				return (int) ( $entry['next_at'] ?? 0 ) <= $now;
 			}
+		);
+		foreach ( array_slice( $due, 0, self::PAGE_SIZE, true ) as $order_id => $entry ) {
+			$tries = (int) ( $entry['tries'] ?? 0 );
 			$result = self::complete_recorded( (int) $order_id, $handler );
 			if ( is_wp_error( $result ) ) {
 				$code = $result->get_error_code();

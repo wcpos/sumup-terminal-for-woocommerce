@@ -200,6 +200,18 @@ $GLOBALS['now'] = 1000000 + Legacy_Adoption::LOOKUP_BACKOFF[0];
 Legacy_Adoption::complete_recorded_page();
 expect( array( 51, 50 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a queued order is completed once due, after the pass is over' );
 
+// 1f. A page is taken from the entries due now: a full page of entries waiting out a long backoff
+//     at the front of the queue does not hold back a due one behind them.
+reset_state( array(), 0 );
+$GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
+for ( $i = 60; $i < 60 + Legacy_Adoption::PAGE_SIZE; $i++ ) {
+	$GLOBALS['options']['sutwc_completion_queue'][ $i ] = array( 'tries' => 4, 'next_at' => 1000000 + 21600 );
+}
+$GLOBALS['options']['sutwc_completion_queue'][90] = array( 'tries' => 0, 'next_at' => 1000000 );
+$GLOBALS['by_id'] = array( 90 => new WC_Order( 90, '', 'ctx_behind', 'PAID' ) );
+Legacy_Adoption::complete_recorded_page();
+expect( array( 90 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'][90] ) && Legacy_Adoption::PAGE_SIZE === count( $GLOBALS['options']['sutwc_completion_queue'] ), 'a due entry behind a full page of waiting ones is completed; the waiting ones are kept' );
+
 // 5. Once the version is recorded, nothing runs.
 reset_state( array( new WC_Order( 14, 'rdr_a', 'ctx_late' ) ), 14 );
 $GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
