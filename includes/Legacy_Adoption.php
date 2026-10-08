@@ -80,11 +80,15 @@ final class Legacy_Adoption {
 			);
 			foreach ( $candidates as $order ) {
 				$ref = self::action_ref( $order );
-				if ( '' !== $ref && ! $order->is_paid() && $order->needs_payment() ) {
+				// An attempt without a start time predates the marker (v0.0.10); the provider could
+				// never confirm it finished, so it is not adopted. It is months old by now, and a
+				// paid one is caught by the recorded-success pass below.
+				if ( '' !== $ref && (int) $order->get_meta( self::META_STARTED ) > 0 && ! $order->is_paid() && $order->needs_payment() ) {
 					$queue[ $order->get_id() ] = $ref;
 				}
 			}
 			update_option( 'sutwc_adoption_queue', $queue, false );
+			update_option( 'sutwc_completion_queue', self::recorded_successes(), false );
 		}
 		$page = array_slice( $queue, 0, self::PAGE_SIZE, true );
 		foreach ( $page as $order_id => $ref ) {
@@ -119,12 +123,88 @@ final class Legacy_Adoption {
 			}
 			unset( $queue[ $order_id ] );
 		}
-		if ( array() === $queue ) {
-			delete_option( 'sutwc_adoption_queue' );
-			update_option( 'sutwc_adoption_version', self::VERSION, false );
-			return;
-		}
 		update_option( 'sutwc_adoption_queue', $queue, false );
+		$completions = self::complete_recorded_page();
+		if ( array() === $queue && array() === $completions ) {
+			delete_option( 'sutwc_adoption_queue' );
+			delete_option( 'sutwc_completion_queue' );
+			update_option( 'sutwc_adoption_version', self::VERSION, false );
+		}
+	}
+
+	/**
+	 * Orders whose old-panel attempt SumUp recorded as successful (PAID checkout or SUCCESSFUL
+	 * transaction) but whose form submit never landed, so they still wait for payment. The old
+	 * panel completed them on its next status check; that path is gone.
+	 *
+	 * @return int[] Order ids.
+	 */
+	private static function recorded_successes(): array {
+		$ids = array();
+		foreach ( array( array( self::META_STATUS, 'PAID' ), array( '_sumup_transaction_status', 'SUCCESSFUL' ) ) as $pair ) {
+			$orders = wc_get_orders(
+				array(
+					'type'       => 'shop_order',
+					'limit'      => -1,
+					'orderby'    => 'ID',
+					'order'      => 'ASC',
+					'meta_key'   => $pair[0], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One-off upgrade pass.
+					'meta_value' => $pair[1], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- One-off upgrade pass.
+				)
+			);
+			foreach ( $orders as $order ) {
+				if ( '' !== (string) $order->get_transaction_id() && ! $order->is_paid() && $order->needs_payment() ) {
+					$ids[ $order->get_id() ] = true;
+				}
+			}
+		}
+		return array_keys( $ids );
+	}
+
+	/**
+	 * Complete one page of recorded successes, each under the order lock on SumUp's word.
+	 *
+	 * @return int[] What is left of the completion queue.
+	 */
+	private static function complete_recorded_page(): array {
+		$queue = get_option( 'sutwc_completion_queue', array() );
+		if ( ! is_array( $queue ) || array() === $queue ) {
+			return array();
+		}
+		$handler = new AjaxHandler();
+		foreach ( array_slice( $queue, 0, self::PAGE_SIZE ) as $order_id ) {
+			$result = self::complete_recorded( (int) $order_id, $handler );
+			if ( is_wp_error( $result ) && in_array( $result->get_error_code(), array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {
+				Logger::log( 'Legacy SumUp completion deferred for order ' . $order_id . ': ' . $result->get_error_code() );
+				continue;
+			}
+			$queue = array_values( array_diff( $queue, array( $order_id ) ) );
+		}
+		update_option( 'sutwc_completion_queue', $queue, false );
+		return $queue;
+	}
+
+	/**
+	 * Complete a recorded success under the order lock: the order is re-read inside it and the
+	 * adopted and paid checks repeated on that copy, so two deliveries, or a delivery racing the
+	 * adoption pass, cannot complete the same order twice or complete one Pro now owns.
+	 *
+	 * @param int         $order_id Order id.
+	 * @param AjaxHandler $handler  The handler that knows SumUp's transaction lookup.
+	 * @return bool|null|\WP_Error Whether the order was completed, null when nothing applied,
+	 *                             or the lock's error.
+	 */
+	public static function complete_recorded( int $order_id, AjaxHandler $handler ) {
+		return self::with_order_lock(
+			$order_id,
+			static function () use ( $order_id, $handler ) {
+				$fresh = wc_get_order( $order_id );
+				if ( ! $fresh || self::is_adopted_order( $fresh ) ) {
+					return null;
+				}
+				return $handler->complete_recorded_attempt( $fresh );
+			}
+		);
 	}
 
 	/**
@@ -136,7 +216,7 @@ final class Legacy_Adoption {
 	 */
 	private static function with_order_lock( int $order_id, callable $callback ) {
 		if ( ! class_exists( '\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock' ) ) {
-			return new \WP_Error( 'sutwc_adoption_no_lock' );
+			return new \WP_Error( 'sutwc_adoption_no_lock', 'The POS order lock is unavailable.' );
 		}
 		return \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::instance()->with_lock( $order_id, $callback );
 	}

@@ -15,10 +15,12 @@ require_once __DIR__ . '/../../includes/Settings.php';
 require_once __DIR__ . '/../../includes/Logger.php';
 require_once __DIR__ . '/../../includes/Legacy_Adoption.php';
 require_once __DIR__ . '/../../includes/AjaxHandler.php';
+require_once __DIR__ . '/stubs/order-lock.php';
 
 if ( ! function_exists( 'wp_doing_ajax' ) ) { function wp_doing_ajax() { return false; } }
 if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return new class() { public function error( $m, $c = array() ) {} public function info( $m, $c = array() ) {} public function debug( $m, $c = array() ) {} }; } }
 function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
+function wc_get_order( $id ) { return $GLOBALS['current']; }
 
 class WC_Order {
 	public $touched = false;
@@ -38,18 +40,18 @@ if ( PHP_VERSION_ID < 80100 ) { $method->setAccessible( true ); }
 $event = array( 'event_type' => 'unknown.event', 'payload' => array(), 'timestamp' => gmdate( 'c' ) );
 
 $GLOBALS['adopted_map'] = array( 'rdr_a:ctx_1' => 'row-1' );
-$order = new WC_Order();
+$order = new WC_Order(); $GLOBALS['current'] = $order;
 $method->invoke( $handler, $order, $event );
 expect( false === $order->touched, 'an adopted attempt is left to Pro: the webhook writes nothing' );
 
 $GLOBALS['adopted_map'] = array();
-$order = new WC_Order();
+$order = new WC_Order(); $GLOBALS['current'] = $order;
 $method->invoke( $handler, $order, $event );
 expect( true === $order->touched, 'an unadopted attempt is processed as before' );
 
 // After Pro captures the row Free rewrites the transaction id; the reference kept at adoption still identifies it.
 $GLOBALS['adopted_map'] = array( 'rdr_a:ctx_original' => 'row-1' );
-$order = new WC_Order(); $order->adopted_ref = 'rdr_a:ctx_original';
+$order = new WC_Order(); $order->adopted_ref = 'rdr_a:ctx_original'; $GLOBALS['current'] = $order;
 $method->invoke( $handler, $order, $event );
 expect( false === $order->touched, 'an adopted attempt is recognised by the reference kept on the order' );
 

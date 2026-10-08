@@ -15,20 +15,24 @@ require_once __DIR__ . '/../../includes/Settings.php';
 require_once __DIR__ . '/../../includes/Logger.php';
 require_once __DIR__ . '/../../includes/Legacy_Adoption.php';
 require_once __DIR__ . '/../../includes/AjaxHandler.php';
+require_once __DIR__ . '/stubs/order-lock.php';
 
 if ( ! function_exists( 'wp_doing_ajax' ) ) { function wp_doing_ajax() { return false; } }
 if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return new class() { public function error( $m, $c = array() ) {} public function info( $m, $c = array() ) {} public function debug( $m, $c = array() ) {} }; } }
 if ( ! function_exists( '__' ) ) { function __( $text, $domain = '' ) { return $text; } }
-function wcpos_pro_payment_id_for_action( $provider, $ref ) { return null; }
+function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
+function wc_get_order( $id ) { return $GLOBALS['fresh']; }
+$GLOBALS['adopted_map'] = array();
 
 class WC_Order {
 	public $meta = array( '_sumup_reader_id' => 'rdr_a', '_sumup_checkout_status' => 'PENDING' );
+	public $txn = 'ctx_1';
 	public $paid = false; public $completed = array(); public $notes = array();
 	public function get_id() { return 42; }
 	public function get_meta( $key ) { return $this->meta[ $key ] ?? ''; }
 	public function update_meta_data( $key, $value ) { $this->meta[ $key ] = $value; }
 	public function delete_meta_data( $key ) { unset( $this->meta[ $key ] ); }
-	public function get_transaction_id() { return 'ctx_1'; }
+	public function get_transaction_id() { return $this->txn; }
 	public function is_paid() { return $this->paid; }
 	public function needs_payment() { return ! $this->paid; }
 	public function payment_complete( $txn = '' ) { $this->completed[] = $txn; $this->paid = true; return true; }
@@ -47,27 +51,40 @@ $handler = new class() extends WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler {
 
 // A successful delivery, confirmed by the lookup: the order is completed with the client id.
 $handler->lookup = array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' );
-$order = new WC_Order();
+$order = new WC_Order(); $GLOBALS['fresh'] = $order;
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked = array();
 $method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
 expect( array( 'ctx_1' ) === $order->completed, 'a confirmed success completes the order with the client transaction id' );
+expect( array( 42 ) === \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked, 'the completion runs under the order lock' );
+
+// The fresh copy read under the lock decides: paid meanwhile, or adopted meanwhile, nothing is completed.
+$order = new WC_Order(); $paid = new WC_Order(); $paid->paid = true; $GLOBALS['fresh'] = $paid;
+$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
+expect( array() === $order->completed && array() === $paid->completed, 'an order paid between the check and the lock is not completed again' );
+$order = new WC_Order(); $adopted = new WC_Order(); $adopted->meta['_sutwc_adopted_ref'] = 'rdr_a:ctx_1'; $GLOBALS['fresh'] = $adopted; $GLOBALS['adopted_map'] = array( 'rdr_a:ctx_1' => 'row-1' );
+// The stale copy passes the early adopted check (no adopted ref on it); the fresh copy is adopted.
+$order->meta['_sumup_reader_id'] = ''; $order->txn = '';
+$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
+expect( array() === $adopted->completed, 'an order adopted between the check and the lock is left to Pro' );
+$GLOBALS['adopted_map'] = array();
 
 // A successful delivery the lookup does not confirm: nothing is completed.
 foreach ( array( array( 'client_transaction_id' => 'ctx_1', 'status' => 'PENDING' ), array( 'client_transaction_id' => 'ctx_other', 'status' => 'SUCCESSFUL' ), null ) as $lookup ) {
 	$handler->lookup = $lookup;
-	$order = new WC_Order();
+	$order = new WC_Order(); $GLOBALS['fresh'] = $order;
 	$method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
 	expect( array() === $order->completed, 'the unsigned delivery alone never completes an order' );
 }
 
 // A failed delivery: nothing is completed, whatever the lookup says.
 $handler->lookup = array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' );
-$order = new WC_Order();
+$order = new WC_Order(); $GLOBALS['fresh'] = $order;
 $method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'FAILED' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
 expect( array() === $order->completed, 'a failed delivery completes nothing' );
 
 // An order already paid is not completed again.
 $handler->lookup = array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' );
-$order = new WC_Order(); $order->paid = true;
+$order = new WC_Order(); $order->paid = true; $GLOBALS['fresh'] = $order;
 $method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) );
 expect( array() === $order->completed, 'a paid order is not completed twice' );
 

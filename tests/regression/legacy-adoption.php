@@ -4,6 +4,14 @@
 // client transaction id) are folded into Pro's ledger once, bounded to orders that existed
 // when the pass began, under Free's order lock with a fresh read; everything else is skipped.
 
+namespace WCPOS\WooCommercePOS\SumUpTerminal {
+	class AjaxHandler {
+		public static $completed = array();
+		public function __construct() {}
+		public function complete_recorded_attempt( $order ) { self::$completed[] = $order->get_id(); return true; }
+	}
+}
+
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Server {
 	class SumUp_Server_Provider {
 		public static $marked = array();
@@ -43,17 +51,17 @@ if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return 
 if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; } }
 function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; }
 function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; }
-function wc_get_orders( $args ) { $GLOBALS['queries'][] = $args; return $GLOBALS['page']; }
+function wc_get_orders( $args ) { $GLOBALS['queries'][] = $args; return 'PENDING' === ( $args['meta_value'] ?? '' ) ? $GLOBALS['page'] : ( $GLOBALS['recorded'][ $args['meta_value'] ] ?? array() ); }
 function wc_get_order( $id ) { return $GLOBALS['fresh'][ $id ] ?? ( $GLOBALS['by_id'][ $id ] ?? false ); }
 function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
 function wcpos_pro_adopt_legacy_attempt( $order, $gateway_id, $ref, $amount, $currency ) { $GLOBALS['adopted'][] = array( $order->get_id(), $gateway_id, $ref, $amount, $currency ); return array( 'id' => 'row' ); }
 
 class WC_Order {
-	public $id; public $reader; public $txn; public $status; public $paid; public $modified;
+	public $id; public $reader; public $txn; public $status; public $paid; public $modified; public $started = 1700000000;
 	public function __construct( $id, $reader, $txn, $status = 'PENDING', $paid = false, $modified = null ) { $this->id = $id; $this->reader = $reader; $this->txn = $txn; $this->status = $status; $this->paid = $paid; $this->modified = $modified; }
 	public function get_id() { return $this->id; }
 	public $meta = array();
-	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? $this->reader : ( '_sumup_checkout_status' === $key ? $this->status : ( '_sumup_attempt_started' === $key ? 1700000000 : ( $this->meta[ $key ] ?? '' ) ) ); }
+	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? $this->reader : ( '_sumup_checkout_status' === $key ? $this->status : ( '_sumup_attempt_started' === $key ? $this->started : ( $this->meta[ $key ] ?? '' ) ) ); }
 	public function update_meta_data( $key, $value ) { $this->meta[ $key ] = $value; }
 	public function save() {}
 	public function get_transaction_id() { return $this->txn; }
@@ -74,6 +82,8 @@ function reset_state( array $page, int $newest, array $fresh = array() ) {
 	$GLOBALS['adopted']     = array();
 	$GLOBALS['adopted_map'] = array();
 	$GLOBALS['queries']     = array();
+	$GLOBALS['recorded']    = array();
+	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed = array();
 	\WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider::$marked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
@@ -98,9 +108,38 @@ expect( array( array( 'ctx_live', 1700000000 ) ) === \WCPOS\WooCommercePOS\SumUp
 expect( 'rdr_a:ctx_live' === $GLOBALS['by_id'][1]->meta['_sutwc_adopted_ref'], 'the adopted reference is kept on the order' );
 $q = $GLOBALS['queries'][0];
 expect( -1 === $q['limit'] && '_sumup_checkout_status' === $q['meta_key'] && 'PENDING' === $q['meta_value'] && 'ID' === $q['orderby'], 'the snapshot query selects every PENDING attempt in id order' );
-expect( 1 === count( $GLOBALS['queries'] ), 'the snapshot is taken once' );
+expect( 3 === count( $GLOBALS['queries'] ), 'the snapshot is taken once: the PENDING attempts and the two recorded-success queries' );
+
 expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a short queue finishes the pass' );
 expect( ! isset( $GLOBALS['options']['sutwc_adoption_queue'] ), 'the queue is cleared' );
+
+// 1b. An attempt without a start time predates the provider's marker and is not adopted.
+reset_state( array( new WC_Order( 20, 'rdr_a', 'ctx_ancient' ) ), 20 );
+$GLOBALS['page'][0]->started = 0;
+Legacy_Adoption::upgrade();
+expect( array() === $GLOBALS['adopted'], 'an attempt with no start time is not adopted' );
+
+// 1c. A success the old panel recorded but never completed is completed on SumUp's word, under
+//     the lock, from the pass itself; an adopted order is not touched; a held lock keeps it queued.
+reset_state( array(), 0 );
+$paid_pending = new WC_Order( 30, '', 'ctx_recorded', 'PAID' );
+$succ         = new WC_Order( 31, '', 'ctx_succ', '' );
+$already      = new WC_Order( 32, 'rdr_a', 'ctx_adopted2', 'PAID' );
+$GLOBALS['recorded'] = array( 'PAID' => array( $paid_pending, $already ), 'SUCCESSFUL' => array( $succ ) );
+$GLOBALS['by_id']    = array( 30 => $paid_pending, 31 => $succ, 32 => $already );
+$GLOBALS['adopted_map'] = array( 'rdr_a:ctx_adopted2' => 'row-32' );
+Legacy_Adoption::upgrade();
+$completed = \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed; sort( $completed );
+$locked    = \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked; sort( $locked );
+expect( array( 30, 31 ) === $completed, 'recorded successes are completed from the pass, the adopted one is not' );
+expect( array( 30, 31, 32 ) === $locked, 'each completion runs under the order lock' );
+expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'] && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'the pass finishes once both queues are empty' );
+reset_state( array(), 0 );
+$GLOBALS['recorded'] = array( 'PAID' => array( new WC_Order( 33, '', 'ctx_busy2', 'PAID' ) ) );
+$GLOBALS['by_id']    = array( 33 => $GLOBALS['recorded']['PAID'][0] );
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( 33 );
+Legacy_Adoption::upgrade();
+expect( array() === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 33 ) === $GLOBALS['options']['sutwc_completion_queue'] && ! isset( $GLOBALS['options']['sutwc_adoption_version'] ), 'a held lock keeps the recorded success queued and the pass open' );
 
 // 2. The queue is a snapshot: an attempt the old panel starts after the pass began is never a
 //    candidate, and a candidate whose reference changed (a retry) is skipped inside the lock.
