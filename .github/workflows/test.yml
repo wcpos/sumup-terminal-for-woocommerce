@@ -59,4 +59,4 @@ jobs:
         if: matrix.php == '8.3'
         # The legacy files carry pre-existing PHPCS debt (139 errors on `next` at 2026-09-09); they are
         # linted when they are cleaned up, not here, so this check reflects the code this lane owns.
-        run: vendor/bin/phpcs --standard=./.phpcs.xml.dist sumup-terminal-for-woocommerce.php includes/Settings.php includes/Gateway.php includes/Server includes/Services/RefundClient.php
+        run: vendor/bin/phpcs --standard=./.phpcs.xml.dist sumup-terminal-for-woocommerce.php includes/Settings.php includes/Gateway.php includes/Server includes/Services/RefundClient.php includes/Legacy_Adoption.php

@@ -34,16 +34,12 @@ class Gateway extends WC_Payment_Gateway {
 	 */
 	private $profile_service;
 
-
-
 	/**
 	 * The reader service instance.
 	 *
 	 * @var ReaderService The reader service instance.
 	 */
 	private $reader_service;
-
-
 
 	/**
 	 * Constructor for the gateway.
@@ -68,12 +64,9 @@ class Gateway extends WC_Payment_Gateway {
 		// Save settings hook.
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
 
-		// Enqueue admin scripts.
+		// Enqueue admin scripts; the order-pay page is Pro's panel and brings its own.
 		if ( is_admin() ) {
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
-		} else {
-			// Enqueue frontend payment scripts.
-			add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_payment_scripts' ) );
 		}
 	}
 
@@ -86,8 +79,6 @@ class Gateway extends WC_Payment_Gateway {
 		return $this->profile_service;
 	}
 
-
-
 	/**
 	 * Get the reader service.
 	 *
@@ -96,8 +87,6 @@ class Gateway extends WC_Payment_Gateway {
 	public function get_reader_service() {
 		return $this->reader_service;
 	}
-
-
 
 	/**
 	 * Initialize gateway form fields.
@@ -375,144 +364,30 @@ class Gateway extends WC_Payment_Gateway {
 	public function process_payment( $order_id ) {
 		$order = wc_get_order( $order_id );
 
-		// Check if a transaction ID is recorded.
-		$transaction_id = $order->get_transaction_id();
-		if ( empty( $transaction_id ) ) {
-			wc_add_notice( __( 'Payment error: No transaction ID recorded.', 'sumup-terminal-for-woocommerce' ), 'error' );
-
-			return;
+		if ( $order->is_paid() ) {
+			return array(
+				'result'   => 'success',
+				'redirect' => $this->get_return_url( $order ),
+			);
 		}
 
-		// Check if the order is already paid.
-		if ( ! $order->is_paid() ) {
-			$checkout_status    = strtoupper( (string) $order->get_meta( '_sumup_checkout_status' ) );
-			$transaction_status = strtoupper( (string) $order->get_meta( '_sumup_transaction_status' ) );
-			if ( 'PAID' !== $checkout_status && 'SUCCESSFUL' !== $transaction_status ) {
-				wc_add_notice( __( 'The terminal payment has not completed yet.', 'sumup-terminal-for-woocommerce' ), 'error' );
-
-				return array( 'result' => 'failure' );
-			}
-
-			$order->payment_complete();
-		}
-
-		// Return thank-you page URL.
-		return array(
-			'result'   => 'success',
-			'redirect' => $this->get_return_url( $order ),
-		);
+		// Pro's panel drives the leg and reads the ledger; it answers the form submit.
+		return wcpos_pro_order_pay_process( $order );
 	}
 
 	/**
-	 * Payment fields displayed on the POS order-pay page.
+	 * The POS order-pay page is Pro's shared panel; the gateway renders only its description.
 	 */
 	public function payment_fields(): void {
 		global $wp;
 
-		// Description for the payment method.
 		echo '<p>' . esc_html( $this->get_option( 'description' ) ) . '</p>';
 
-		// Check if services are available and API key is valid.
-		if ( ! $this->profile_service || ! $this->reader_service || empty( $this->api_key ) ) {
-			echo '<div class="woocommerce-error">';
-			echo '<p>' . esc_html__( 'SumUp Terminal is not properly configured. Please contact the store administrator.', 'sumup-terminal-for-woocommerce' ) . '</p>';
-			echo '</div>';
-
-			return;
+		$order = wc_get_order( isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0 );
+		if ( $order instanceof \WC_Order ) {
+			wcpos_pro_order_pay_panel( $this, $order );
 		}
-
-		// Check if we can get the merchant code (this will use caching).
-		$merchant_code = $this->profile_service->get_merchant_code();
-		if ( ! $merchant_code ) {
-			echo '<div class="woocommerce-error">';
-			echo '<p>' . esc_html__( 'SumUp Terminal is not properly configured. Please contact the store administrator.', 'sumup-terminal-for-woocommerce' ) . '</p>';
-			echo '</div>';
-
-			return;
-		}
-
-		// Get available readers.
-		$readers = $this->reader_service->get_all();
-
-		if ( ! $readers || empty( $readers ) ) {
-			echo '<div class="woocommerce-error">';
-			echo '<p>' . esc_html__( 'No SumUp Terminal readers are available. Please contact the store administrator.', 'sumup-terminal-for-woocommerce' ) . '</p>';
-			echo '</div>';
-
-			return;
-		}
-
-		// The panel only renders on the order-pay page.
-		$order_id  = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
-		$order     = $order_id ? wc_get_order( $order_id ) : false;
-		$order_key = $order ? $order->get_order_key() : '';
-
-		// Display reader selection and controls.
-		echo '<div id="sumup-terminal-payment-interface" data-order-id="' . esc_attr( $order_id ) . '" data-order-key="' . esc_attr( $order_key ) . '">';
-		echo '<h4>' . esc_html__( 'Available SumUp Terminal Readers', 'sumup-terminal-for-woocommerce' ) . '</h4>';
-
-		foreach ( $readers as $reader ) {
-			// Skip readers without an ID.
-			if ( empty( $reader['id'] ) ) {
-				continue;
-			}
-
-			$reader_id     = (string) $reader['id'];
-			$reader_name   = esc_html( $reader['name'] ?? __( 'Unnamed Reader', 'sumup-terminal-for-woocommerce' ) );
-			$reader_status = esc_html( ucfirst( $reader['status'] ?? __( 'Unknown', 'sumup-terminal-for-woocommerce' ) ) );
-
-			echo '<div class="sumup-reader-card">';
-			echo '<div class="reader-info">';
-			echo '<strong>' . $reader_name . '</strong>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
-			echo '<br><small>' . esc_html__( 'Status:', 'sumup-terminal-for-woocommerce' ) . ' ' . $reader_status . '</small>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
-			echo '<br><small>' . esc_html__( 'Model:', 'sumup-terminal-for-woocommerce' ) . ' ' . esc_html( $reader['device']['model'] ?? $reader['model'] ?? __( 'Unknown', 'sumup-terminal-for-woocommerce' ) ) . '</small>';
-			echo '</div>';
-
-			echo '<div class="reader-controls">';
-			echo '<button type="button" class="button button-primary sumup-checkout-btn" data-reader-id="' . esc_attr( $reader_id ) . '" data-order-id="' . esc_attr( $order_id ) . '">';
-			echo esc_html__( 'Start Payment', 'sumup-terminal-for-woocommerce' );
-			echo '</button>';
-			echo '<button type="button" class="button sumup-check-status-btn" data-reader-id="' . esc_attr( $reader_id ) . '" data-order-id="' . esc_attr( $order_id ) . '">';
-			echo esc_html__( 'Check Status', 'sumup-terminal-for-woocommerce' );
-			echo '</button>';
-			echo '<button type="button" class="button sumup-cancel-btn" data-reader-id="' . esc_attr( $reader_id ) . '" data-order-id="' . esc_attr( $order_id ) . '" hidden>';
-			echo esc_html__( 'Cancel Payment', 'sumup-terminal-for-woocommerce' );
-			echo '</button>';
-			echo '</div>';
-			echo '<div class="payment-status" id="payment-status-' . esc_attr( $reader_id ) . '" role="status" aria-live="polite"></div>';
-			echo '</div>';
-		}
-
-		if ( 'yes' === $this->get_option( 'show_payment_logs', 'no' ) ) {
-			echo '<div class="sumup-logging-section">';
-			echo '<div class="sumup-logging-header">';
-			echo '<strong>' . esc_html__( 'Payment logs', 'sumup-terminal-for-woocommerce' ) . '</strong>';
-			echo '<div class="sumup-logging-actions">';
-			echo '<button type="button" class="button sumup-toggle-log" aria-expanded="false">' . esc_html__( 'Show logs', 'sumup-terminal-for-woocommerce' ) . '</button>';
-			echo '<button type="button" class="button sumup-copy-log">' . esc_html__( 'Copy', 'sumup-terminal-for-woocommerce' ) . '</button>';
-			echo '<button type="button" class="button sumup-clear-log">' . esc_html__( 'Clear', 'sumup-terminal-for-woocommerce' ) . '</button>';
-			echo '</div>';
-			echo '</div>';
-			echo '<div class="sumup-log-content" hidden>';
-			echo '<textarea class="sumup-payment-log-textarea" readonly placeholder="' . esc_attr__( 'SumUp payment activity will appear here.', 'sumup-terminal-for-woocommerce' ) . '"></textarea>';
-			echo '</div>';
-			echo '</div>';
-		}
-
-		echo '</div>';
-
-		// Add empty nonce for JavaScript compatibility (not used for validation in POS environment).
-		wp_add_inline_script(
-			'sumup-terminal-payment',
-			'if (typeof sumupPaymentData !== "undefined") { sumupPaymentData.nonce = "pos_environment"; }',
-			'after'
-		);
-
-		// Fallback message for users without JavaScript enabled.
-		echo '<noscript>' . esc_html__( 'Please enable JavaScript to use the SumUp Terminal integration.', 'sumup-terminal-for-woocommerce' ) . '</noscript>';
 	}
-
-
 
 	/**
 	 * Process admin options (override to reinitialize services when API key changes).
@@ -588,78 +463,6 @@ class Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Enqueue payment scripts for the checkout interface.
-	 */
-	public function enqueue_payment_scripts(): void {
-		// The panel lives on the order-pay page only.
-		if ( ! is_checkout_pay_page() ) {
-			return;
-		}
-
-		global $wp;
-
-		// Enqueue the payment CSS.
-		wp_enqueue_style(
-			'sumup-terminal-payment',
-			SUTWC_PLUGIN_URL . 'assets/css/payment.css',
-			array(),
-			SUTWC_VERSION
-		);
-
-		// Enqueue the payment script.
-		wp_enqueue_script(
-			'sumup-terminal-payment',
-			SUTWC_PLUGIN_URL . 'assets/js/payment.js',
-			array( 'jquery' ),
-			SUTWC_VERSION,
-			true
-		);
-
-		$order_id = isset( $wp->query_vars['order-pay'] ) ? absint( $wp->query_vars['order-pay'] ) : 0;
-
-		// Localize script data for payment interface (nonce will be added in payment_fields).
-		wp_localize_script(
-			'sumup-terminal-payment',
-			'sumupPaymentData',
-			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'orderId' => $order_id,
-				'strings' => array(
-					'startingPayment'    => __( 'Starting payment...', 'sumup-terminal-for-woocommerce' ),
-					'paymentInProgress'  => __( 'Payment in progress...', 'sumup-terminal-for-woocommerce' ),
-					'paymentCancelled'   => __( 'Cancellation request sent. Please check the reader.', 'sumup-terminal-for-woocommerce' ),
-					'paymentSuccess'     => __( 'Payment successful!', 'sumup-terminal-for-woocommerce' ),
-					'paymentFailed'      => __( 'Payment failed:', 'sumup-terminal-for-woocommerce' ),
-					'networkError'       => __( 'Network error occurred', 'sumup-terminal-for-woocommerce' ),
-					'startPayment'       => __( 'Start Payment', 'sumup-terminal-for-woocommerce' ),
-					'paymentStarted'     => __( 'Payment started', 'sumup-terminal-for-woocommerce' ),
-					'checkingStatus'     => __( 'Checking reader status…', 'sumup-terminal-for-woocommerce' ),
-					'cancelConfirm'      => __( 'Are you sure you want to cancel this payment?', 'sumup-terminal-for-woocommerce' ),
-					'cancellingPayment'  => __( 'Requesting cancellation…', 'sumup-terminal-for-woocommerce' ),
-					'followReader'       => __( 'Follow the instructions on the card reader.', 'sumup-terminal-for-woocommerce' ),
-					'pollTimedOut'       => __( 'Payment status timed out. Requesting cancellation…', 'sumup-terminal-for-woocommerce' ),
-					'logsShown'          => __( 'Hide logs', 'sumup-terminal-for-woocommerce' ),
-					'logsHidden'         => __( 'Show logs', 'sumup-terminal-for-woocommerce' ),
-					'logsCopied'         => __( 'Logs copied to clipboard.', 'sumup-terminal-for-woocommerce' ),
-					'logsCopyFailed'     => __( 'Unable to copy logs automatically.', 'sumup-terminal-for-woocommerce' ),
-					'logCleared'         => __( 'Log cleared.', 'sumup-terminal-for-woocommerce' ),
-					'panelReady'         => __( 'SumUp payment panel ready.', 'sumup-terminal-for-woocommerce' ),
-					'statusAlreadyChecking' => __( 'A status check is already in progress.', 'sumup-terminal-for-woocommerce' ),
-					'cancellationPendingTimeout' => __( 'Cancellation is still pending. Use Check Status before starting another payment.', 'sumup-terminal-for-woocommerce' ),
-					'readerReady'        => __( 'Reader is ready.', 'sumup-terminal-for-woocommerce' ),
-					'readerSelectingTip' => __( 'Waiting for tip selection on the reader.', 'sumup-terminal-for-woocommerce' ),
-					'readerWaitingForCard' => __( 'Waiting for the customer to present a card.', 'sumup-terminal-for-woocommerce' ),
-					'readerWaitingForPin' => __( 'Waiting for PIN entry on the reader.', 'sumup-terminal-for-woocommerce' ),
-					'readerWaitingForSignature' => __( 'Waiting for the customer signature.', 'sumup-terminal-for-woocommerce' ),
-					'readerUpdatingFirmware' => __( 'Reader firmware update in progress.', 'sumup-terminal-for-woocommerce' ),
-					'readerOffline'      => __( 'Reader is offline.', 'sumup-terminal-for-woocommerce' ),
-					'readerStatus'       => __( 'Reader status:', 'sumup-terminal-for-woocommerce' ),
-				),
-			)
-		);
-	}
-
-	/**
 	 * Initialize the SumUp services.
 	 */
 	private function init_services(): void {
@@ -672,8 +475,6 @@ class Gateway extends WC_Payment_Gateway {
 		// Note: We no longer fetch merchant_code here to avoid unnecessary API calls.
 		// The merchant_code will be fetched lazily when needed and cached.
 	}
-
-
 
 	/**
 	 * Get the connection status HTML for display.
