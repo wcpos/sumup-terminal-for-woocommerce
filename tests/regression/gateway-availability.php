@@ -24,6 +24,9 @@ require_once __DIR__ . '/../../includes/Gateway.php';
 
 $gateway  = ( new ReflectionClass( WCPOS\WooCommercePOS\SumUpTerminal\Gateway::class ) )->newInstanceWithoutConstructor();
 $api_key  = new ReflectionProperty( WCPOS\WooCommercePOS\SumUpTerminal\Gateway::class, 'api_key' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$api_key->setAccessible( true );
+}
 
 // key, pos request, order-pay page, pos user => available
 $cases = array(
