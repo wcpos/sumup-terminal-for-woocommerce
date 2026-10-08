@@ -9,7 +9,7 @@ function plugin_dir_url( $file ) { return 'https://shop.example/plugins/sumup/';
 function register_activation_hook( $file, $callback ) {}
 require_once __DIR__ . '/../../sumup-terminal-for-woocommerce.php';
 $callback = array( Pos_Reader_Settings::class, 'migrate_once' );
-expect( in_array( $callback, $GLOBALS['hooks']['plugins_loaded'][30], true ), 'migration hooked after Pro loads' );
+expect( in_array( $callback, $GLOBALS['hooks']['plugins_loaded'][31], true ), 'migration hooked after the gate' );
 enable_pro();
 $option = 'woocommerce_pos_settings_payment_gateways';
 $GLOBALS['options']['woocommerce_' . Settings::GATEWAY_ID . '_settings'] = array( 'default_reader' => 'one', 'allowed_readers' => array( 'one' ), 'lock_to_default' => 'yes' );

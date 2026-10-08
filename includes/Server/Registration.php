@@ -9,10 +9,10 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Server;
 
 use WCPOS\WooCommercePOS\SumUpTerminal\Settings;
 
-/** Register only when the shared Pro contract is available. */
+/** Register the server and device providers with Pro. */
 final class Registration {
-	// First Pro version with wcpos_pro_register_server_provider() and the shared server handler.
-	public const REQUIRED_PRO_VERSION = '1.11.0';
+	// First Pro release the extension runs on: the shared payments base and the order-pay panel.
+	public const REQUIRED_PRO_VERSION = '2.0.0';
 	/** Whether this request registered the provider.
 	 *
 	 * @var bool
@@ -37,16 +37,5 @@ final class Registration {
 			self::$registered = true;
 		}
 		return true;
-	}
-
-	/**
-	 * Record Pro's notice for an installed but unsupported Pro.
-	 *
-	 * @param string $plugin_file Plugin entry point.
-	 */
-	public static function activation_check( string $plugin_file ): void {
-		if ( function_exists( 'wcpos_pro_requires' ) && ! wcpos_pro_requires( self::REQUIRED_PRO_VERSION ) ) {
-			wcpos_pro_requires( self::REQUIRED_PRO_VERSION, $plugin_file );
-		}
 	}
 }

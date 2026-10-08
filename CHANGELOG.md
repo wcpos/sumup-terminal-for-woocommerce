@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Requires WooCommerce POS Pro 2.0.0 or newer; the plugin registers nothing and shows an admin notice on older or missing Pro.
+- Web checkout removed: SumUp Terminal is no longer offered on the shop's checkout, and the "Enable SumUp Terminal for web checkout" setting is gone. The POS keypad and the POS order-pay page are the only surfaces.
 - A cancel from the till is confirmed about three seconds after the tap instead of twelve: once SumUp's own delivery that the checkout ended without money has arrived after the terminate, the reader status is checked at once rather than after the ten-second grace.
 - A checkout the store terminated is confirmed cancelled on the next poll when SumUp has no transaction for it; a physical Solo never records one, so the till waited for the five-minute deadline.
 - POS connection defaults to the Solo over the cloud when nothing is saved; the Bluetooth default hid the SumUp tile on every web and desktop till.
