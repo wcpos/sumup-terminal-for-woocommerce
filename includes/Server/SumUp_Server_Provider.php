@@ -295,6 +295,22 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	}
 
 	/**
+	 * Record when an attempt the old panel started reached the reader, so an adopted leg
+	 * nobody pays can be confirmed finished the way a keypad leg is (reader_finished()
+	 * measures the reader's activity from this moment) instead of waiting for the deadline
+	 * void, whose terminate would reach a reader that may be mid-sale for someone else.
+	 *
+	 * @param string $client_id SumUp client transaction id.
+	 * @param int    $started   Unix time the old panel sent the checkout.
+	 */
+	public static function mark_adopted_checkout( string $client_id, int $started ): void {
+		if ( '' === $client_id || $started <= 0 ) {
+			return;
+		}
+		set_transient( self::marker_key( 'checkout', $client_id ), (float) $started, 15 * MINUTE_IN_SECONDS );
+	}
+
+	/**
 	 * Transient key for a checkout marker.
 	 *
 	 * @param string $what      `checkout`, `terminated` or `ended`.

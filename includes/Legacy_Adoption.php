@@ -19,6 +19,10 @@ final class Legacy_Adoption {
 	public const META_STATUS = '_sumup_checkout_status';
 	/** The reader the old panel sent the checkout to. */
 	public const META_READER = '_sumup_reader_id';
+	/** When the old panel sent the checkout (unix time). */
+	public const META_STARTED = '_sumup_attempt_started';
+	/** The action reference Pro adopted, kept on the order after Free rewrites the transaction id. */
+	public const META_ADOPTED = '_sutwc_adopted_ref';
 
 	/**
 	 * The action reference Pro's provider uses for an attempt the old panel started:
@@ -40,6 +44,16 @@ final class Legacy_Adoption {
 	 */
 	public static function is_adopted( string $ref ): bool {
 		return '' !== $ref && \function_exists( 'wcpos_pro_payment_id_for_action' ) && null !== wcpos_pro_payment_id_for_action( self::PROVIDER, $ref );
+	}
+
+	/**
+	 * Whether Pro adopted the attempt on this order: by its current reference, or by the one
+	 * recorded at adoption, since Free rewrites the order's transaction id once a row captures.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	public static function is_adopted_order( \WC_Order $order ): bool {
+		return self::is_adopted( self::action_ref( $order ) ) || self::is_adopted( (string) $order->get_meta( self::META_ADOPTED ) );
 	}
 
 	/** Run the next page of adoption, until every candidate snapshotted at the start has been seen. */
@@ -83,7 +97,15 @@ final class Legacy_Adoption {
 					if ( ! $fresh || self::is_adopted( $ref ) || self::action_ref( $fresh ) !== $ref || 'PENDING' !== strtoupper( (string) $fresh->get_meta( self::META_STATUS ) ) || $fresh->is_paid() || ! $fresh->needs_payment() ) {
 						return null;
 					}
-					return wcpos_pro_adopt_legacy_attempt( $fresh, Settings::GATEWAY_ID, $ref, (string) $fresh->get_total(), $fresh->get_currency() );
+					$row = wcpos_pro_adopt_legacy_attempt( $fresh, Settings::GATEWAY_ID, $ref, (string) $fresh->get_total(), $fresh->get_currency() );
+					if ( is_array( $row ) ) {
+						// Pro's fetch() measures the reader's activity from this moment, as it would
+						// for a keypad leg, so an attempt nobody pays settles without the deadline.
+						Server\SumUp_Server_Provider::mark_adopted_checkout( (string) $fresh->get_transaction_id(), (int) $fresh->get_meta( self::META_STARTED ) );
+						$fresh->update_meta_data( self::META_ADOPTED, $ref );
+						$fresh->save();
+					}
+					return $row;
 				}
 			);
 			if ( is_wp_error( $result ) && in_array( $result->get_error_code(), array( 'wcpos_payment_locked', 'sutwc_adoption_no_lock' ), true ) ) {

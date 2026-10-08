@@ -23,7 +23,8 @@ function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['a
 class WC_Order {
 	public $touched = false;
 	public function get_id() { return 42; }
-	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? 'rdr_a' : ''; }
+	public $adopted_ref = '';
+	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? 'rdr_a' : ( '_sutwc_adopted_ref' === $key ? $this->adopted_ref : '' ); }
 	public function get_transaction_id() { return 'ctx_1'; }
 	public function update_meta_data( $key, $value ) { $this->touched = true; }
 	public function is_paid() { return false; }
@@ -45,5 +46,11 @@ $GLOBALS['adopted_map'] = array();
 $order = new WC_Order();
 $method->invoke( $handler, $order, $event );
 expect( true === $order->touched, 'an unadopted attempt is processed as before' );
+
+// After Pro captures the row Free rewrites the transaction id; the reference kept at adoption still identifies it.
+$GLOBALS['adopted_map'] = array( 'rdr_a:ctx_original' => 'row-1' );
+$order = new WC_Order(); $order->adopted_ref = 'rdr_a:ctx_original';
+$method->invoke( $handler, $order, $event );
+expect( false === $order->touched, 'an adopted attempt is recognised by the reference kept on the order' );
 
 echo "PASS: the legacy webhook skips adopted attempts.\n";

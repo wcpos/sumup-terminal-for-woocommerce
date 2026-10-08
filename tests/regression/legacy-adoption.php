@@ -4,6 +4,13 @@
 // client transaction id) are folded into Pro's ledger once, bounded to orders that existed
 // when the pass began, under Free's order lock with a fresh read; everything else is skipped.
 
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Server {
+	class SumUp_Server_Provider {
+		public static $marked = array();
+		public static function mark_adopted_checkout( string $client_id, int $started ): void { self::$marked[] = array( $client_id, $started ); }
+	}
+}
+
 namespace WCPOS\WooCommercePOS\Payments\Contract {
 class Order_Lock {
 	public static $locked = array();
@@ -36,7 +43,7 @@ if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return 
 if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; } }
 function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; }
 function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; }
-function wc_get_orders( $args ) { return $GLOBALS['page']; }
+function wc_get_orders( $args ) { $GLOBALS['queries'][] = $args; return $GLOBALS['page']; }
 function wc_get_order( $id ) { return $GLOBALS['fresh'][ $id ] ?? ( $GLOBALS['by_id'][ $id ] ?? false ); }
 function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
 function wcpos_pro_adopt_legacy_attempt( $order, $gateway_id, $ref, $amount, $currency ) { $GLOBALS['adopted'][] = array( $order->get_id(), $gateway_id, $ref, $amount, $currency ); return array( 'id' => 'row' ); }
@@ -45,7 +52,10 @@ class WC_Order {
 	public $id; public $reader; public $txn; public $status; public $paid; public $modified;
 	public function __construct( $id, $reader, $txn, $status = 'PENDING', $paid = false, $modified = null ) { $this->id = $id; $this->reader = $reader; $this->txn = $txn; $this->status = $status; $this->paid = $paid; $this->modified = $modified; }
 	public function get_id() { return $this->id; }
-	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? $this->reader : ( '_sumup_checkout_status' === $key ? $this->status : '' ); }
+	public $meta = array();
+	public function get_meta( $key ) { return '_sumup_reader_id' === $key ? $this->reader : ( '_sumup_checkout_status' === $key ? $this->status : ( '_sumup_attempt_started' === $key ? 1700000000 : ( $this->meta[ $key ] ?? '' ) ) ); }
+	public function update_meta_data( $key, $value ) { $this->meta[ $key ] = $value; }
+	public function save() {}
 	public function get_transaction_id() { return $this->txn; }
 	public function is_paid() { return $this->paid; }
 	public function needs_payment() { return ! $this->paid; }
@@ -63,6 +73,8 @@ function reset_state( array $page, int $newest, array $fresh = array() ) {
 	$GLOBALS['fresh']       = $fresh;
 	$GLOBALS['adopted']     = array();
 	$GLOBALS['adopted_map'] = array();
+	$GLOBALS['queries']     = array();
+	\WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider::$marked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
 }
@@ -82,6 +94,11 @@ $GLOBALS['adopted_map'] = array( 'rdr_b:ctx_adopted' => 'row-6' );
 Legacy_Adoption::upgrade();
 expect( array( array( 1, \WCPOS\WooCommercePOS\SumUpTerminal\Settings::GATEWAY_ID, 'rdr_a:ctx_live', '12.50', 'EUR' ) ) === $GLOBALS['adopted'], 'only the attempt in flight is adopted, by reader:client id' );
 expect( array( 1, 6 ) === \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked, 'the lock is taken before the adopted check is repeated' );
+expect( array( array( 'ctx_live', 1700000000 ) ) === \WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider::$marked, 'the provider learns when the adopted checkout began' );
+expect( 'rdr_a:ctx_live' === $GLOBALS['by_id'][1]->meta['_sutwc_adopted_ref'], 'the adopted reference is kept on the order' );
+$q = $GLOBALS['queries'][0];
+expect( -1 === $q['limit'] && '_sumup_checkout_status' === $q['meta_key'] && 'PENDING' === $q['meta_value'] && 'ID' === $q['orderby'], 'the snapshot query selects every PENDING attempt in id order' );
+expect( 1 === count( $GLOBALS['queries'] ), 'the snapshot is taken once' );
 expect( Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'a short queue finishes the pass' );
 expect( ! isset( $GLOBALS['options']['sutwc_adoption_queue'] ), 'the queue is cleared' );
 

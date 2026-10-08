@@ -189,7 +189,7 @@ class AjaxHandler {
 	 * @param array    $webhook_data The webhook payload.
 	 */
 	private function process_webhook( $order, $webhook_data ): void {
-		if ( Legacy_Adoption::is_adopted( Legacy_Adoption::action_ref( $order ) ) ) {
+		if ( Legacy_Adoption::is_adopted_order( $order ) ) {
 			// Pro adopted this attempt on upgrade; its outcome is Pro's to record.
 			Logger::log( 'SumUp Webhook: attempt adopted by WooCommerce POS Pro for order ' . $order->get_id() . '; ignoring.' );
 			return;
