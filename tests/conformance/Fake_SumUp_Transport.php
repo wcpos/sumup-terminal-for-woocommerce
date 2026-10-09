@@ -56,8 +56,9 @@ final class Fake_SumUp_Transport {
 			$row = array_search( $client, $this->by_row, true );
 			if ( false !== $row ) {
 				foreach ( array( 'checkout', 'terminated' ) as $marker ) {
-					if ( false !== get_transient( 'sutwc_' . $marker . '_' . md5( 'row-' . $row ) ) ) {
-						set_transient( 'sutwc_' . $marker . '_' . md5( 'row-' . $row ), microtime( true ) - 121, 15 * MINUTE_IN_SECONDS );
+					// The adapter keeps an unanswered checkout's markers as options.
+					if ( false !== get_option( 'sutwc_' . $marker . '_' . md5( 'row-' . $row ), false ) ) {
+						update_option( 'sutwc_' . $marker . '_' . md5( 'row-' . $row ), (string) ( microtime( true ) - 121 ), false );
 					}
 				}
 			}
