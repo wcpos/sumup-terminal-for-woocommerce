@@ -19,9 +19,27 @@ wcpos_settle_payment( $verified['payment_id'], $verified['patch'] );
 expect( strtolower( server_row()['id'] ) === $settled[0][0], 'query id is canonicalized' );
 $patch = $settled[0][1];
 expect( 'captured' === $patch['status'] && '12.30' === $patch['amount'] && 'EUR' === $patch['currency'], 'authoritative settlement money' );
-expect( '0123' === $patch['receipt']['card_last4'] && 'event-123' === $patch['event_id'] && ! isset( $patch['provider_refs'] ), 'receipt, dedupe and preserved Pro refs' );
+expect( '0123' === $patch['receipt']['card_last4'] && 'client:123:successful:SUCCESSFUL' === $patch['event_id'] && ! isset( $patch['provider_refs'] ), 'receipt, an observation-derived dedupe key, and preserved Pro refs' );
+expect( ! isset( $GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ] ), 'an ordinary row carries its client id in the action: nothing is recorded' );
+$GLOBALS['options'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] = (string) microtime( true );
+$provider->verify_webhook( $request );
+expect( 'client:123' === $GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ], 'a row whose create SumUp did not answer gets its settling client id recorded for refunds' );
+// A late "failed" delivery for that row, while the lookup lists the checkout as paid, must not
+// mark the row ended: the held poll would end a paid leg on it.
+$late = $event; $late['payload']['status'] = 'failed'; $request->set_body( json_encode( $late ) );
+$provider->verify_webhook( $request );
+expect( ! isset( $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'a failed delivery contradicted by a paid lookup does not mark the row ended' );
+$transactions->result = null; $request->set_body( json_encode( $late ) );
+$provider->verify_webhook( $request );
+expect( isset( $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'a failed delivery with nothing listed marks the row ended' );
+unset( $GLOBALS['options'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] );
+$provider->verify_webhook( $request );
+expect( ! isset( $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'an ordinary row (no unanswered start) gets no ended option: every decline would otherwise leave one' );
+$transactions->result = array( 'items' => array( server_transaction() ) ); $request->set_body( json_encode( $event ) );
+unset( $GLOBALS['options'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['transients'][ $ended ] );
 foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_transaction(), array( 'client_transaction_id' => 'wrong' ) ) ) as $transactions->result ) {
-	expect( array( 'event_id' => 'event-123' ) === $provider->verify_webhook( $request )['patch'], 'unconfirmed webhook is event-only' );
+	$patch = $provider->verify_webhook( $request )['patch'];
+	expect( array( 'event_id' ) === array_keys( $patch ) && 'client:123:successful:SUCCESSFUL' !== $patch['event_id'], 'unconfirmed webhook is event-only, under an id the confirmed delivery will not reuse' );
 }
 $transactions->result = server_transaction();
 foreach ( array( 'pending', 'something_new', '' ) as $status ) {
@@ -30,7 +48,7 @@ foreach ( array( 'pending', 'something_new', '' ) as $status ) {
 	expect( ! isset( $GLOBALS['transients'][ $ended ] ), "a '$status' delivery is not the end of the checkout" );
 }
 $event['payload']['status'] = 'failed'; $request->set_body( json_encode( $event ) );
-expect( array( 'event_id' => 'event-123' ) === $provider->verify_webhook( $request )['patch'], 'poll owns non-money outcomes' );
+expect( array( 'event_id' => 'client:123:failed:SUCCESSFUL' ) === $provider->verify_webhook( $request )['patch'], 'poll owns non-money outcomes' );
 expect( isset( $GLOBALS['transients'][ $ended ] ) && abs( time() - $GLOBALS['transients'][ $ended ] ) <= 1 && 15 * MINUTE_IN_SECONDS === $GLOBALS['ttls'][ $ended ], 'a failed delivery is remembered for the cancel poll' );
 unset( $GLOBALS['transients'][ $ended ] );
 $event['payload']['status'] = 'CANCELLED'; $request->set_body( json_encode( $event ) );
@@ -38,7 +56,7 @@ $provider->verify_webhook( $request );
 expect( isset( $GLOBALS['transients'][ $ended ] ), 'a cancelled delivery, any case, is remembered too' );
 $event['payload']['status'] = 'failed';
 unset( $event['id'] );
-expect( array( 'event_id' => 'client:123:failed' ) === Provider::webhook_patch( $event, server_transaction() ), 'fallback dedupe key' );
+expect( array( 'event_id' => 'client:123:failed:SUCCESSFUL' ) === Provider::webhook_patch( $event, server_transaction() ), 'the dedupe key derives from the observation, never from the delivery id' );
 $event['payload']['merchant_code'] = 'other'; $request->set_body( json_encode( $event ) );
 $error = $provider->verify_webhook( $request );
 expect( 'sumup_webhook_merchant_mismatch' === $error->get_error_code() && 403 === $error->get_error_data()['status'], 'merchant mismatch' );

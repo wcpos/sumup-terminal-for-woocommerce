@@ -44,6 +44,7 @@ namespace {
 	if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $ttl ) { if ( ! empty( $GLOBALS['transient_write_fails'] ) ) { return false; } $GLOBALS['transients'][ $key ] = $value; $GLOBALS['ttls'][ $key ] = $ttl; return true; } }
 	if ( ! function_exists( 'delete_transient' ) ) { function delete_transient( $key ) { unset( $GLOBALS['transients'][ $key ] ); return true; } }
 	if ( ! defined( 'MINUTE_IN_SECONDS' ) ) { define( 'MINUTE_IN_SECONDS', 60 ); }
+	if ( ! defined( 'DAY_IN_SECONDS' ) ) { define( 'DAY_IN_SECONDS', 86400 ); }
 	if ( ! function_exists( 'delete_option' ) ) { function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; } }
 	if ( ! function_exists( 'wc_get_order' ) ) { function wc_get_order( $id ) { return $GLOBALS['orders'][ $id ] ?? false; } }
 	if ( ! function_exists( '__' ) ) { function __( $text, $domain = null ) { return $text; } }
@@ -64,6 +65,10 @@ namespace WCPOS\WooCommercePOSPro\Payments\Server {
 	}
 	if ( ! class_exists( __NAMESPACE__ . '\\Abstract_Provider_Adapter' ) ) {
 		abstract class Abstract_Provider_Adapter implements Provider_Adapter_Interface {
+			/** Keep a potentially dispatched charge pending when the provider cannot answer. */
+			protected function indeterminate( string $code, string $message ): \WP_Error {
+				return new \WP_Error( $code, $message, array( 'indeterminate' => true, 'status' => 502 ) );
+			}
 			public function describe( \WC_Payment_Gateway $gateway ): array { return array(); }
 			public function capture( string $ref ) { return $this->unsupported(); }
 			public function refund( array $row, int $refund_id, string $amount ) { return $this->unsupported(); }

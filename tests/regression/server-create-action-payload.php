@@ -20,7 +20,7 @@ foreach ( array( array( 'eur', '12.30', 1230, 2 ), array( 'jpy', '123', 123, 0 )
 	expect( array( 'value' => $case[2], 'currency' => strtoupper( $case[0] ), 'minor_unit' => $case[3] ) === $payload['total_amount'], 'row money, not order total' );
 	expect( 'Order #WEB-12' === $payload['description'], 'order number description' );
 	parse_str( parse_url( $payload['return_url'], PHP_URL_QUERY ), $query );
-	expect( array( 'provider' => 'sumup', 'payment' => $row['id'] ) === $query, 'result webhook routing' );
+	expect( array( 'provider' => 'sumup', 'payment' => $row['id'], 'reader' => 'reader' ) === $query, 'result webhook routing, with the reader for the adoption lookup' );
 	expect( ! isset( $payload['affiliate'] ), 'no incomplete affiliate' );
 }
 foreach ( array( array( '', 'key' ), array( 'app', '' ), array( 'app', 'key' ) ) as $settings ) {

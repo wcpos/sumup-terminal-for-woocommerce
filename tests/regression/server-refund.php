@@ -8,6 +8,23 @@ function wp_remote_retrieve_response_code( $response ) { return $response['respo
 function wp_remote_retrieve_body( $response ) { return $response['body']; }
 list( $provider, $profile, $readers, $transactions ) = server_fixture();
 $transactions->result = server_transaction();
+// A row whose create SumUp did not answer, settled by its delivery: with affiliate keys the
+// refund finds the transaction by the row's foreign id; without them, through the id the webhook
+// recorded against the row; with neither, SumUp is not asked for a refund it cannot place.
+$GLOBALS['options']['woocommerce_sumup_terminal_for_woocommerce_settings'] = array( 'api_key' => 'test', 'affiliate_app_id' => 'app', 'affiliate_key' => 'key' );
+$response = array( 'response' => array( 'code' => 204 ), 'body' => '' );
+$held_row = server_row(); $held_row['provider_refs'] = array( 'action' => 'reader:row-' . strtolower( server_row()['id'] ), 'reader' => 'reader' );
+$transactions->result = array( 'items' => array( server_transaction() + array( 'foreign_transaction_id' => server_row()['id'] ) ) );
+expect( array( 'status' => 'succeeded', 'provider_ref' => 'txn-123' ) === $provider->refund( $held_row, 46, '12.30' ), 'a held row refunds the transaction found by its foreign id' );
+$GLOBALS['options']['woocommerce_sumup_terminal_for_woocommerce_settings'] = array( 'api_key' => 'test' );
+$GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ] = 'client:123';
+$transactions->result = server_transaction();
+expect( array( 'status' => 'succeeded', 'provider_ref' => 'txn-123' ) === $provider->refund( $held_row, 47, '12.30' ), 'a held row refunds the transaction its delivery recorded' );
+unset( $GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ] );
+$requests = array();
+$result = $provider->refund( $held_row, 48, '12.30' );
+expect( is_wp_error( $result ) && 'transaction_not_found' === $result->get_error_data()['detail']['code'] && array() === $requests, 'with nothing recorded, no refund is placed' );
+$transactions->result = server_transaction();
 $response = array( 'response' => array( 'code' => 204 ), 'body' => '' );
 foreach ( array( array( '12.30', '' ), array( '2.30', array( 'amount' => 2.3 ) ) ) as $case ) {
 	$result = $provider->refund( server_row(), 45, $case[0] );
