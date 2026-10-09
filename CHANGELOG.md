@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A POS checkout SumUp did not answer (a dropped connection, a timeout, an outage) now keeps the leg pending instead of dropping it while the checkout may be on the reader; a busy-reader refusal on the retry of such a leg keeps it pending too, since the checkout holding the reader may be this sale's, and the first checkout settles the leg through its result URL if the customer pays it.
+- A refund from the POS of an order paid on the previous order-pay panel finds the SumUp transaction by the order's transaction id.
+- A result delivery for an attempt the POS adopted on upgrade resolves to that attempt; a delivery for no POS payment is still acknowledged so SumUp stops retrying.
+- Pro's provider conformance suite runs in CI against the real adapter over a scripted SumUp; the transcripts in `tests/conformance/transcripts` are the certified record.
 - Requires WooCommerce POS Pro 2.0.0 or newer; the plugin registers nothing and shows an admin notice on older or missing Pro.
 - Web checkout removed: SumUp Terminal is no longer offered on the shop's checkout, and the "Enable SumUp Terminal for web checkout" setting is gone. The POS keypad and the POS order-pay page are the only surfaces.
 - The POS Legacy tab (order-pay page) runs through WooCommerce POS Pro's shared order-pay panel, so a Legacy-tab payment is a ledger row like a keypad payment; the plugin's own order-pay script and its payment AJAX endpoints are removed.

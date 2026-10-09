@@ -26,7 +26,7 @@ expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'mismat
 $transactions->result = array( 'items' => array( $transactions->result, server_transaction() ) );
 $result = $provider->fetch( 'reader:client:123' );
 expect( 'completed' === $result['status'] && '12.30' === $result['amount'] && 'EUR' === $result['currency'], 'matching list member and decimal money' );
-expect( array( 'sumup_transaction' => 'txn-123', 'sumup_transaction_code' => 'CODE', 'sumup_client_transaction' => 'client:123' ) === $result['provider_refs'], 'refs never overwrite action or reader' );
+expect( array( 'sumup_transaction' => 'txn-123', 'sumup_transaction_code' => 'CODE', 'sumup_client_transaction' => 'client:123', 'transaction_id' => 'client:123' ) === $result['provider_refs'], 'refs never overwrite action or reader; the client id is the historical refund reference' );
 expect( array( 'card_last4' => '0123', 'card_type' => 'VISA', 'entry_mode' => 'contactless', 'payment_type' => 'POS', 'transaction_code' => 'CODE' ) === $result['receipt'], 'flat receipt mapping' );
 $txn = server_transaction(); $txn['currency'] = 'JPY'; $txn['amount'] = 123;
 expect( '123' === Provider::normalize( $txn )['amount'], 'zero-decimal money' );

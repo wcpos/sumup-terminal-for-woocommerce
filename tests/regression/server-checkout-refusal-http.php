@@ -37,11 +37,46 @@ refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 400, 
 // An empty error body still names what happened.
 $response = array( 'response' => array( 'code' => 404 ), 'body' => '' );
 refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 404, 'HTTP 404', 'sumup_http_404' );
-// An outage (5xx or no response) stays transport: the till retries it.
+// An outage (5xx or no response) after the checkout was sent is indeterminate: the checkout may
+// be on the reader, so the row stays pending and Pro replays it (never a dropped leg).
+function unanswered_expect( $result, $code, $message ) {
+	expect( is_wp_error( $result ) && $code === $result->get_error_code(), "code $code, got " . ( is_wp_error( $result ) ? $result->get_error_code() : 'no error' ) );
+	expect( true === ( $result->get_error_data()['indeterminate'] ?? false ), 'indeterminate' );
+	expect( $message === $result->get_error_message(), "message '$message', got '" . $result->get_error_message() . "'" );
+}
 $response = array( 'response' => array( 'code' => 503 ), 'body' => '{"message":"Service unavailable"}' );
-refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 502, 'Service unavailable', 'sumup_http_503' );
+unanswered_expect( $provider->create_reader_action( server_row(), 'reader' ), 'sumup_checkout_unanswered', 'Service unavailable' );
 $response = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
-refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 502, 'cURL error 28: timed out', 'http_request_failed' );
+unanswered_expect( $provider->create_reader_action( server_row(), 'reader' ), 'sumup_checkout_unanswered', 'cURL error 28: timed out' );
+// A busy reader on a first attempt is final: another sale holds the reader, nothing of ours is on it.
+$response = array( 'response' => array( 'code' => 409 ), 'body' => '{"message":"The reader is busy with another checkout."}' );
+refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 409, 'The reader is busy with another checkout.', 'sumup_http_409' );
+// A REPLAY (Free appended "Provider did not answer" to the row) sends nothing: the first checkout
+// may be on the reader and may be paid, and SumUp cannot say which. The adapter hands Pro a
+// row-keyed reference by which that checkout is polled and cancelled, from the moment the
+// unanswered create was sent.
+$replayed = server_row(); $replayed['events'] = array( array( 't' => gmdate( 'c' ), 'level' => 'warning', 'message' => 'Provider did not answer: sumup_checkout_unanswered' ) );
+$sent = count( $requests );
+$result = $provider->create_reader_action( $replayed, 'reader' );
+expect( array( 'ref' => 'reader:row-' . server_row()['id'], 'expires_at' => null ) === $result, 'a replay hands back the row-keyed reference' );
+expect( $sent === count( $requests ), 'a replay sends no checkout' );
+expect( isset( $GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'row-' . server_row()['id'] ) ] ), 'the unanswered checkout is timed from its own start' );
+// Cancelling through the row-keyed reference: within SumUp's checkout window the reader is
+// terminated (the first checkout is likely still on it); past the window it is not, since the
+// reader may be on another sale by now, and the store's cancel is only recorded.
+$response = array( 'response' => array( 'code' => 204 ), 'body' => '' );
+$held = 'reader:row-' . server_row()['id'];
+$sent = count( $requests );
+expect( 'requested' === $provider->cancel( $held ), 'a held reference cancels as requested' );
+expect( $sent + 1 === count( $requests ) && false !== strpos( end( $requests )[0], '/readers/reader/terminate' ), 'within the window the reader is terminated' );
+$GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'row-' . server_row()['id'] ) ] = microtime( true ) - 121;
+unset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'row-' . server_row()['id'] ) ] );
+$sent = count( $requests );
+expect( 'requested' === $provider->cancel( $held ), 'an aged held reference still cancels as requested' );
+expect( $sent === count( $requests ), 'past the window nothing is sent: the reader may be on another sale' );
+expect( isset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'row-' . server_row()['id'] ) ] ), 'the store\'s cancel is recorded for the poll' );
+$response = array( 'response' => array( 'code' => 422 ), 'body' => '{"errors":{"total_amount":["this merchant can only accept \'EUR\'"]}}' );
+refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 422, "this merchant can only accept 'EUR'", 'sumup_http_422' );
 // A success after a refusal clears the record.
 $response = array( 'response' => array( 'code' => 201 ), 'body' => '{"data":{"client_transaction_id":"client:123"}}' );
 expect( array( 'ref' => 'reader:client:123', 'expires_at' => null ) === $provider->create_reader_action( server_row(), 'reader' ), 'success after refusal' );

@@ -64,6 +64,10 @@ namespace WCPOS\WooCommercePOSPro\Payments\Server {
 	}
 	if ( ! class_exists( __NAMESPACE__ . '\\Abstract_Provider_Adapter' ) ) {
 		abstract class Abstract_Provider_Adapter implements Provider_Adapter_Interface {
+			/** Keep a potentially dispatched charge pending when the provider cannot answer. */
+			protected function indeterminate( string $code, string $message ): \WP_Error {
+				return new \WP_Error( $code, $message, array( 'indeterminate' => true, 'status' => 502 ) );
+			}
 			public function describe( \WC_Payment_Gateway $gateway ): array { return array(); }
 			public function capture( string $ref ) { return $this->unsupported(); }
 			public function refund( array $row, int $refund_id, string $amount ) { return $this->unsupported(); }

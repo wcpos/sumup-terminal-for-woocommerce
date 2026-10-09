@@ -28,6 +28,16 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 */
 	public const TERMINATE_GRACE_SECONDS = 10;
 
+	/**
+	 * How long after a checkout SumUp did not answer for its reader is trusted as finished when
+	 * idle with no transaction: SumUp holds a checkout on the reader for about a minute, and a
+	 * paid one's delivery follows within seconds, so two minutes outlives both.
+	 */
+	public const UNANSWERED_GRACE_SECONDS = 120;
+
+	/** Prefix of the client id the adapter uses for a checkout SumUp did not answer for. */
+	private const UNANSWERED_PREFIX = 'row-';
+
 	/** Merchant profile.
 	 *
 	 * @var ProfileService
@@ -152,21 +162,48 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 						'minor_unit' => strlen( $fraction[1] ?? '' ),
 					),
 					'description' => sprintf( 'Order #%s', $order->get_order_number() ),
-					'return_url' => self::webhook_url( $row['id'] ),
+					'return_url' => self::webhook_url( $row['id'], $reader_id ),
 				);
+				// A create that got no answer may still have put OUR checkout on the reader, and the
+				// customer may pay it. SumUp's checkout has no idempotency key and the client transaction
+				// id is SumUp's, so a replay can neither resume it nor see whether it was paid: a replay
+				// dispatches NOTHING. It hands Pro a reference of the adapter's own, keyed on the row, by
+				// which the first checkout is polled (idle reader, no transaction: it ended) and cancelled
+				// (terminate the reader). The return URL carries the row id, so the first checkout settles
+				// the row by webhook if it is paid. Free appends "Provider did not answer" to the stored
+				// row's events on an unanswered create: that is the replay signal.
+				if ( ! empty( $row['events'] ) ) {
+					$unanswered = self::UNANSWERED_PREFIX . $row['id'];
+					if ( false === get_transient( self::marker_key( 'checkout', $unanswered ) ) ) {
+						self::remember( 'checkout', $unanswered );
+					}
+					return array(
+						'ref' => ( $row['provider_refs']['reader'] ?? $reader_id ) . ':' . $unanswered,
+						'expires_at' => null,
+					);
+				}
 				$affiliate = Settings::affiliate();
 				if ( '' !== $affiliate['app_id'] && '' !== $affiliate['key'] ) {
 					$payload['affiliate'] = $affiliate + array( 'foreign_transaction_id' => $row['id'] );
 				}
 				$result = $this->readers->checkout( $reader_id, $payload );
 				if ( false === $result ) {
-					// A refused checkout (422: a currency this merchant cannot take) must reach the
-					// till with SumUp's words and its 4xx, so the app stops instead of retrying;
-					// an outage (5xx, no response) stays a 502 the app retries as transport.
 					$last = $this->readers->last_error();
 					$data = $last ? $last->get_error_data() : null;
 					$http = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
-					return self::error( $last ?? false, 'sumup_api_error', $http >= 400 && $http < 500 ? $http : 502 );
+					if ( null === $last ) {
+						// Nothing was sent (no merchant id): final, nothing can be on the reader.
+						return self::error( false );
+					}
+					if ( $http < 400 || $http >= 500 ) {
+						// Sent and not answered (transport failure, timeout, an outage): the checkout may
+						// be on the reader. Pro replays the row; the replay above polls it from this moment.
+						self::remember( 'checkout', self::UNANSWERED_PREFIX . $row['id'] );
+						return $this->indeterminate( 'sumup_checkout_unanswered', $last->get_error_message() );
+					}
+					// A refused checkout (422: a currency this merchant cannot take) must reach the
+					// till with SumUp's words and its 4xx, so the app stops instead of retrying.
+					return self::error( $last ?? false, 'sumup_api_error', $http );
 				}
 				if ( is_wp_error( $result ) ) {
 					return self::error( $result );
@@ -275,6 +312,18 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		if ( false === $started && false === $terminated ) {
 			return false;
 		}
+		if ( 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ) {
+			// A checkout SumUp did not answer for: an idle reader with no transaction also describes
+			// a paid checkout SumUp has not listed yet, so the leg ends only on SumUp's own word that
+			// the row's checkout ended without money, or after the store's own terminate plus the
+			// long grace below; never on the reader alone.
+			if ( false !== get_transient( self::marker_key( 'ended', $client_id ) ) ) {
+				return true;
+			}
+			if ( false === $terminated ) {
+				return false;
+			}
+		}
 		// The grace runs from the latest thing that happened; the reader's activity is measured
 		// from the checkout's start, because terminating a checkout the reader already dropped
 		// (its own timeout) produces no new activity on the device.
@@ -282,7 +331,8 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		$since  = false !== $started ? (int) $started : (int) $terminated;
 		$ended  = get_transient( self::marker_key( 'ended', $client_id ) );
 		$reported = false !== $terminated && false !== $ended && (float) $ended > (float) $terminated;
-		if ( ! $reported && time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
+		$grace    = 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ? self::UNANSWERED_GRACE_SECONDS : self::TERMINATE_GRACE_SECONDS;
+		if ( ! $reported && time() - $latest < $grace ) {
 			return false;
 		}
 		$status = $this->readers->get_status( $reader_id );
@@ -308,6 +358,15 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 			return;
 		}
 		set_transient( self::marker_key( 'checkout', $client_id ), (float) $started, 15 * MINUTE_IN_SECONDS );
+	}
+
+	/**
+	 * Option that records, for a row, the client transaction id whose delivery settled its money.
+	 *
+	 * @param string $payment_id Ledger row id.
+	 */
+	private static function settled_key( string $payment_id ): string {
+		return 'sutwc_settled_' . md5( $payment_id );
 	}
 
 	/**
@@ -349,6 +408,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				'sumup_transaction' => $transaction['id'] ?? null,
 				'sumup_transaction_code' => $transaction['transaction_code'] ?? null,
 				'sumup_client_transaction' => $transaction['client_transaction_id'] ?? null,
+				// The reference a historical webview row refunds by: the old panel stored the client
+				// transaction id as the order's transaction id.
+				'transaction_id' => $transaction['client_transaction_id'] ?? null,
 			),
 			'receipt' => array_filter(
 				array(
@@ -386,6 +448,17 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( in_array( $status, array( 'FAILED', 'CANCELLED' ), true ) ) {
 					return 'final';
 				}
+				$held = 0 === strpos( $parts[1] ?? '', self::UNANSWERED_PREFIX );
+				if ( $held ) {
+					$started = get_transient( self::marker_key( 'checkout', $parts[1] ) );
+					if ( false === $started || microtime( true ) - (float) $started > self::UNANSWERED_GRACE_SECONDS ) {
+						// SumUp holds a checkout on the reader for about a minute: this one is over, and
+						// a terminate now would reach whatever sale the reader is on. The store's cancel
+						// is recorded without being sent; the poll concludes from the reader after the grace.
+						self::remember_terminated( $parts[1] );
+						return 'requested';
+					}
+				}
 				$result = $this->readers->cancel_checkout( $parts[0] );
 				// Terminate is asynchronous; acceptance never proves that money was not taken.
 				if ( false === $result || is_wp_error( $result ) ) {
@@ -409,7 +482,12 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		return $this->call(
 			function () use ( $row, $amount ) {
 				$ref = $row['provider_refs']['action'] ?? '';
-				$id = '' !== $ref ? ( explode( ':', $ref, 2 )[1] ?? '' ) : ( $row['provider_refs']['sumup_client_transaction'] ?? '' );
+				$id = '' !== $ref ? ( explode( ':', $ref, 2 )[1] ?? '' ) : (string) ( $row['provider_refs']['sumup_client_transaction'] ?? $row['provider_refs']['transaction_id'] ?? '' );
+				if ( 0 === strpos( $id, self::UNANSWERED_PREFIX ) ) {
+					// The checkout SumUp did not answer for was paid and settled by its delivery, which
+					// recorded the client transaction id against the row.
+					$id = (string) get_option( self::settled_key( (string) $row['id'] ), '' );
+				}
 				$transaction = $this->lookup( $id );
 				if ( is_wp_error( $transaction ) ) {
 					return $transaction;
@@ -437,8 +515,12 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	public function verify_webhook( \WP_REST_Request $request ) {
 		return $this->call(
 			function () use ( $request ) {
-				$id = $request->get_query_params()['payment'] ?? '';
-				if ( ! is_string( $id ) || ! preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id ) ) {
+				$query  = $request->get_query_params();
+				$id     = $query['payment'] ?? '';
+				$reader = is_string( $query['reader'] ?? null ) ? $query['reader'] : '';
+				$valid  = is_string( $id ) && preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id );
+				if ( ! $valid && '' === $reader ) {
+					// Not a delivery for a POS payment: acknowledged so SumUp stops retrying.
 					return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
 				}
 				$event = $request->get_json_params();
@@ -460,17 +542,37 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( ! is_string( $client_id ) || '' === $client_id ) {
 					return new \WP_Error( 'sumup_webhook_invalid', 'Missing client transaction ID.', array( 'status' => 400 ) );
 				}
+				// An attempt Pro adopted carries a row id the URL cannot know; the action reference
+				// (reader and client transaction id) resolves it. Only after the merchant check above.
+				$adopted = '' !== $reader && \function_exists( 'wcpos_pro_payment_id_for_action' ) ? wcpos_pro_payment_id_for_action( $this->provider(), $reader . ':' . $client_id ) : null;
+				if ( is_string( $adopted ) && '' !== $adopted ) {
+					$id = $adopted;
+				} elseif ( ! $valid ) {
+					return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
+				}
 				// SumUp says the checkout ended without money: the poll may confirm our terminate at
 				// once. A successful (or unknown) delivery must not — SumUp may not list the
 				// transaction yet, and an IDLE reader would read as cancelled while the money moved.
 				if ( in_array( strtolower( (string) ( $event['payload']['status'] ?? '' ) ), array( 'failed', 'cancelled' ), true ) ) {
 					self::remember( 'ended', $client_id );
+					if ( is_string( $id ) && '' !== $id ) {
+						// A row whose create SumUp did not answer knows no client id; its poll reads this.
+						self::remember( 'ended', self::UNANSWERED_PREFIX . strtolower( $id ) );
+					}
 				}
 				// The authenticated lookup, never the unsigned body, is the money evidence.
 				$transaction = $this->lookup( $client_id );
-				return is_wp_error( $transaction ) ? $transaction : array(
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				$patch = self::webhook_patch( $event, $transaction );
+				if ( 'captured' === ( $patch['status'] ?? '' ) ) {
+					// A row whose create SumUp did not answer knows no client id; its refund reads this.
+					update_option( self::settled_key( strtolower( $id ) ), $client_id, false );
+				}
+				return array(
 					'payment_id' => strtolower( $id ),
-					'patch' => self::webhook_patch( $event, $transaction ),
+					'patch' => $patch,
 				);
 			}
 		);
@@ -478,6 +580,11 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 
 	/**
 	 * Polling owns non-money outcomes; settlement must preserve Pro's references.
+	 *
+	 * The event id derives from the observation (client transaction id, delivered status, and the
+	 * authenticated lookup's status), never from SumUp's delivery id: Free compares ids for
+	 * equality only, so a delivery whose money the lookup could not yet confirm must not spend the
+	 * id a later, confirmed delivery of the same outcome will carry.
 	 *
 	 * @param array       $event SumUp event.
 	 * @param array|false $transaction Authoritative transaction.
@@ -487,7 +594,7 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		$payload = $event['payload'];
 		// A delivery may omit fields; treat a missing status as a non-money event.
 		$status = strtolower( (string) ( $payload['status'] ?? '' ) );
-		$patch = array( 'event_id' => ! empty( $event['id'] ) ? $event['id'] : $payload['client_transaction_id'] . ':' . ( '' !== $status ? $status : 'unknown' ) );
+		$patch = array( 'event_id' => $payload['client_transaction_id'] . ':' . ( '' !== $status ? $status : 'unknown' ) . ':' . ( is_array( $transaction ) && ! empty( $transaction['status'] ) ? $transaction['status'] : 'none' ) );
 		if ( 'successful' === $status && 'SUCCESSFUL' === ( $transaction['status'] ?? '' ) && ( $transaction['client_transaction_id'] ?? null ) === $payload['client_transaction_id'] ) {
 			$normalized = self::normalize( $transaction );
 			$patch += array(
@@ -504,16 +611,18 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	 * Build the shared result URL, separate from legacy admin-ajax.
 	 *
 	 * @param string $payment_id Ledger UUID.
+	 * @param string $reader_id  Reader the checkout went to; with the client transaction id, the action reference.
 	 * @return string Result webhook URL.
 	 */
-	public static function webhook_url( string $payment_id ): string {
-		return add_query_arg(
-			array(
-				'provider' => 'sumup',
-				'payment' => $payment_id,
-			),
-			rest_url( 'wcpos/v2/payments/webhook' )
+	public static function webhook_url( string $payment_id, string $reader_id = '' ): string {
+		$args = array(
+			'provider' => 'sumup',
+			'payment' => $payment_id,
 		);
+		if ( '' !== $reader_id ) {
+			$args['reader'] = $reader_id; // With the client transaction id, the action reference an adoption is keyed by.
+		}
+		return add_query_arg( $args, rest_url( 'wcpos/v2/payments/webhook' ) );
 	}
 
 	/**
