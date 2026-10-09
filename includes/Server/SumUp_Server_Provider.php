@@ -388,7 +388,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 			return self::normalize( $found );
 		}
 		if ( false === $found ) {
-			return $observation; // SumUp could not be asked: the next poll asks again, nothing concludes.
+			// SumUp could not be asked: the next poll asks again, nothing concludes. A leg that stays
+			// here (a key that cannot list transactions) is diagnosable from this line.
+			Logger::log( 'SumUp: the transaction lookup by foreign id for ' . $client_id . ' got no answer; the leg stays pending until SumUp answers.' );
+			return $observation;
 		}
 		$terminated = self::marker( 'terminated', $client_id );
 		if ( false === $terminated ) {
@@ -685,8 +688,8 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 					// A row whose create SumUp did not answer knows no client id; its poll reads this
 					// marker, and only after the store's own cancel (the delivery is unsigned: alone it
 					// never ends a leg), and only when the lookup does not contradict it.
-					if ( '' !== $held_key && ! $paid ) {
-						self::remember( 'ended', $held_key );
+					if ( '' !== $held_key && ! $paid && false !== self::marker( 'checkout', $held_key ) ) {
+						self::remember( 'ended', $held_key ); // Only a row whose create went unanswered has the marker.
 					}
 				}
 				$patch = self::webhook_patch( $event, $transaction );

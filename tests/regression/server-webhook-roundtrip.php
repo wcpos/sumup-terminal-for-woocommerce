@@ -32,6 +32,9 @@ expect( ! isset( $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower(
 $transactions->result = null; $request->set_body( json_encode( $late ) );
 $provider->verify_webhook( $request );
 expect( isset( $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'a failed delivery with nothing listed marks the row ended' );
+unset( $GLOBALS['options'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] );
+$provider->verify_webhook( $request );
+expect( ! isset( $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'an ordinary row (no unanswered start) gets no ended option: every decline would otherwise leave one' );
 $transactions->result = array( 'items' => array( server_transaction() ) ); $request->set_body( json_encode( $event ) );
 unset( $GLOBALS['options'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['options'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['transients'][ $ended ] );
 foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_transaction(), array( 'client_transaction_id' => 'wrong' ) ) ) as $transactions->result ) {
