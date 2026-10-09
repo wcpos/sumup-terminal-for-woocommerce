@@ -20,7 +20,20 @@ expect( strtolower( server_row()['id'] ) === $settled[0][0], 'query id is canoni
 $patch = $settled[0][1];
 expect( 'captured' === $patch['status'] && '12.30' === $patch['amount'] && 'EUR' === $patch['currency'], 'authoritative settlement money' );
 expect( '0123' === $patch['receipt']['card_last4'] && 'client:123:successful:SUCCESSFUL' === $patch['event_id'] && ! isset( $patch['provider_refs'] ), 'receipt, an observation-derived dedupe key, and preserved Pro refs' );
-expect( 'client:123' === $GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ], 'the settling client id is recorded against the row for a refund of an unanswered checkout' );
+expect( ! isset( $GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ] ), 'an ordinary row carries its client id in the action: nothing is recorded' );
+$GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] = microtime( true );
+$provider->verify_webhook( $request );
+expect( 'client:123' === $GLOBALS['options'][ 'sutwc_settled_' . md5( strtolower( server_row()['id'] ) ) ], 'a row whose create SumUp did not answer gets its settling client id recorded for refunds' );
+// A late "failed" delivery for that row, while the lookup lists the checkout as paid, must not
+// mark the row ended: the held poll would end a paid leg on it.
+$late = $event; $late['payload']['status'] = 'failed'; $request->set_body( json_encode( $late ) );
+$provider->verify_webhook( $request );
+expect( ! isset( $GLOBALS['transients'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'a failed delivery contradicted by a paid lookup does not mark the row ended' );
+$transactions->result = null; $request->set_body( json_encode( $late ) );
+$provider->verify_webhook( $request );
+expect( isset( $GLOBALS['transients'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ] ), 'a failed delivery with nothing listed marks the row ended' );
+$transactions->result = array( 'items' => array( server_transaction() ) ); $request->set_body( json_encode( $event ) );
+unset( $GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['transients'][ 'sutwc_ended_' . md5( 'row-' . strtolower( server_row()['id'] ) ) ], $GLOBALS['transients'][ $ended ] );
 foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_transaction(), array( 'client_transaction_id' => 'wrong' ) ) ) as $transactions->result ) {
 	$patch = $provider->verify_webhook( $request )['patch'];
 	expect( array( 'event_id' ) === array_keys( $patch ) && 'client:123:successful:SUCCESSFUL' !== $patch['event_id'], 'unconfirmed webhook is event-only, under an id the confirmed delivery will not reuse' );

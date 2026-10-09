@@ -58,23 +58,37 @@ refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 409, 
 $replayed = server_row(); $replayed['events'] = array( array( 't' => gmdate( 'c' ), 'level' => 'warning', 'message' => 'Provider did not answer: sumup_checkout_unanswered' ) );
 $sent = count( $requests );
 $result = $provider->create_reader_action( $replayed, 'reader' );
-expect( array( 'ref' => 'reader:row-' . server_row()['id'], 'expires_at' => null ) === $result, 'a replay hands back the row-keyed reference' );
+$row_key = md5( 'row-' . strtolower( server_row()['id'] ) );
+expect( array( 'ref' => 'reader:row-' . strtolower( server_row()['id'] ), 'expires_at' => null ) === $result, 'a replay hands back the row-keyed reference (the row id lower-cased, as the webhook keys it)' );
 expect( $sent === count( $requests ), 'a replay sends no checkout' );
-expect( isset( $GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'row-' . server_row()['id'] ) ] ), 'the unanswered checkout is timed from its own start' );
+expect( isset( $GLOBALS['transients'][ 'sutwc_checkout_' . $row_key ] ), 'the unanswered checkout is timed from its own start' );
+// With the start marker gone (evicted), a replay treats the checkout as older than the grace, never as new.
+unset( $GLOBALS['transients'][ 'sutwc_checkout_' . $row_key ] );
+$provider->create_reader_action( $replayed, 'reader' );
+expect( microtime( true ) - $GLOBALS['transients'][ 'sutwc_checkout_' . $row_key ] > 120, 'a missing start marker is rebuilt as old' );
+$GLOBALS['transients'][ 'sutwc_checkout_' . $row_key ] = microtime( true );
 // Cancelling through the row-keyed reference: within SumUp's checkout window the reader is
 // terminated (the first checkout is likely still on it); past the window it is not, since the
 // reader may be on another sale by now, and the store's cancel is only recorded.
 $response = array( 'response' => array( 'code' => 204 ), 'body' => '' );
-$held = 'reader:row-' . server_row()['id'];
+$held = 'reader:row-' . strtolower( server_row()['id'] );
 $sent = count( $requests );
 expect( 'requested' === $provider->cancel( $held ), 'a held reference cancels as requested' );
 expect( $sent + 1 === count( $requests ) && false !== strpos( end( $requests )[0], '/readers/reader/terminate' ), 'within the window the reader is terminated' );
-$GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'row-' . server_row()['id'] ) ] = microtime( true ) - 121;
-unset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'row-' . server_row()['id'] ) ] );
+$GLOBALS['transients'][ 'sutwc_checkout_' . $row_key ] = microtime( true ) - 121;
+unset( $GLOBALS['transients'][ 'sutwc_terminated_' . $row_key ] );
 $sent = count( $requests );
 expect( 'requested' === $provider->cancel( $held ), 'an aged held reference still cancels as requested' );
 expect( $sent === count( $requests ), 'past the window nothing is sent: the reader may be on another sale' );
-expect( isset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'row-' . server_row()['id'] ) ] ), 'the store\'s cancel is recorded for the poll' );
+expect( isset( $GLOBALS['transients'][ 'sutwc_terminated_' . $row_key ] ), 'the store\'s cancel is recorded for the poll' );
+// A terminate the reader refuses (not waiting for a card: the checkout already ended) is not an
+// error for the cashier: the store's cancel is recorded and the poll decides.
+$GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'client:123' ) ] = microtime( true );
+unset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'client:123' ) ] );
+$response = array( 'response' => array( 'code' => 422 ), 'body' => '{"message":"The reader is not waiting for a card."}' );
+expect( 'requested' === $provider->cancel( 'reader:client:123' ) && isset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'client:123' ) ] ), 'a refused terminate means nothing to terminate: requested, and recorded for the poll' );
+$response = array( 'response' => array( 'code' => 503 ), 'body' => '{"message":"Service unavailable"}' );
+expect( is_wp_error( $provider->cancel( 'reader:client:123' ) ), 'an outage on terminate is an error the till retries' );
 $response = array( 'response' => array( 'code' => 422 ), 'body' => '{"errors":{"total_amount":["this merchant can only accept \'EUR\'"]}}' );
 refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 422, "this merchant can only accept 'EUR'", 'sumup_http_422' );
 // A success after a refusal clears the record.

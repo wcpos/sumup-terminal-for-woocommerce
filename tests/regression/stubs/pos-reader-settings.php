@@ -52,6 +52,7 @@ function settings_gateway( $result = array() ) {
 	return array( $gateway, $readers );
 }
 define( 'MINUTE_IN_SECONDS', 60 );
+if ( ! defined( 'DAY_IN_SECONDS' ) ) { define( 'DAY_IN_SECONDS', 86400 ); }
 $GLOBALS['admin'] = true;
 $GLOBALS['ajax'] = false;
 $GLOBALS['options'] = array( 'woocommerce_' . Settings::GATEWAY_ID . '_settings' => array( 'api_key' => 'test' ) );

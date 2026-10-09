@@ -22,6 +22,7 @@ final class Fake_SumUp_Transport {
 	private $checkouts = array();
 	private $by_row = array();
 	private $live = array();
+	private $activity = array();
 	private $readers = array();
 	private $states = array( 'created' );
 	private $scenario = 'create_ok';
@@ -157,25 +158,40 @@ final class Fake_SumUp_Transport {
 					'state'      => 'created',
 					'txn'        => null,
 					'dropped'    => false,
+					'affiliate'  => isset( $body['affiliate']['foreign_transaction_id'] ),
 				);
 				if ( ! empty( $return_query['payment'] ) ) {
 					$this->by_row[ (string) $return_query['payment'] ] = $client;
 				}
-				$this->live[ $reader ] = $client;
-				$this->current         = $client;
+				$this->live[ $reader ]     = $client;
+				$this->activity[ $reader ] = microtime( true );
+				$this->current             = $client;
 				if ( 0 === strpos( $this->scenario, 'create_indeterminate' ) && ! $this->lost ) {
 					$this->lost = true; // Accepted, on the reader, and the response never arrives.
 					return new \WP_Error( 'http_request_failed', 'Response lost after acceptance' );
 				}
 				return self::ok( array( 'data' => array( 'client_transaction_id' => $client, 'checkout_id' => 'chk_' . $this->seq ) ), 201 );
 			}
+			$live = $this->live[ $reader ] ?? null;
+			$idle = null === $live || $this->final( $live );
 			if ( 'terminate' === $r[2] ) {
-				// Asynchronous: SumUp acknowledges, the reader reports the end later.
-				return self::ok( '', 204 );
+				if ( $idle ) {
+					return self::error( 422, 'The reader is not waiting for a card.' ); // Terminate works only during a checkout.
+				}
+				$this->activity[ $reader ] = microtime( true );
+				return self::ok( '', 204 ); // Asynchronous: SumUp acknowledges, the reader reports the end later.
 			}
-			$live  = $this->live[ $reader ] ?? null;
-			$idle  = null === $live || $this->final( $live );
-			return self::ok( array( 'data' => array( 'state' => $idle ? 'IDLE' : 'WAITING_FOR_CARD', 'last_activity' => gmdate( 'c' ), 'status' => 'ONLINE' ) ) );
+			return self::ok( array( 'data' => array( 'state' => $idle ? 'IDLE' : 'WAITING_FOR_CARD', 'last_activity' => gmdate( 'c', (int) ( $this->activity[ $reader ] ?? time() ) ), 'status' => 'ONLINE' ) ) );
+		}
+		if ( "/v2.1/merchants/$m/transactions" === $path && isset( $query['foreign_transaction_id'] ) ) {
+			// Only a checkout created with affiliate keys carries the foreign id, and only once paid
+			// and listed does SumUp return it.
+			$client = $this->by_row[ (string) $query['foreign_transaction_id'] ] ?? null;
+			$entry  = null !== $client ? $this->checkouts[ $client ] : null;
+			if ( null === $entry || empty( $entry['affiliate'] ) || null === $entry['txn'] ) {
+				return self::error( 404, 'No transaction for this foreign transaction id.' );
+			}
+			return self::ok( array( 'items' => array( $entry['txn'] + array( 'foreign_transaction_id' => (string) $query['foreign_transaction_id'] ) ) ) );
 		}
 		if ( "/v2.1/merchants/$m/transactions" === $path ) {
 			$client = (string) ( $query['client_transaction_id'] ?? '' );
@@ -218,6 +234,9 @@ final class Fake_SumUp_Transport {
 	 */
 	private function apply_state( array &$entry, string $state ): void {
 		$entry['state'] = $state;
+		if ( 'created' !== $state ) {
+			$this->activity[ $entry['reader'] ] = microtime( true );
+		}
 		switch ( $state ) {
 			case 'created':
 			case 'expired':

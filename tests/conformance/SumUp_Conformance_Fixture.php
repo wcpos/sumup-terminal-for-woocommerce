@@ -32,6 +32,10 @@ require_once __DIR__ . '/Recording_SumUp_Provider.php';
  *   alone can tell a terminate from a decline (FAILED covers both).
  * - `expiry`: through the adapter's own reader-finished rule (an empty lookup after the terminate
  *   grace, with the reader idle since the checkout began); the fake ages the checkout marker.
+ * The fixture configures affiliate keys, as a merchant can: the checkout then carries the row id as
+ * SumUp's foreign_transaction_id, and a paid checkout SumUp did not answer for is found by it on the
+ * held poll instead of waiting for its delivery. Without them the held leg's end rests on SumUp's
+ * delivery and the store's own cancel plus the grace, which the regression scripts pin.
  * Not claimed: `cancel_final` (terminate is asynchronous and never final), `cancel_unsupported`,
  * `manual_capture`, `prompt`, `test_live_isolation` (one credential, no test mode).
  */
@@ -60,7 +64,7 @@ final class SumUp_Conformance_Fixture implements Conformance_Fixture {
 		$this->old_options  = get_option( 'woocommerce_' . Settings::GATEWAY_ID . '_settings', array() );
 		$this->old_currency = get_option( 'woocommerce_currency' );
 		update_option( 'woocommerce_currency', 'EUR' );
-		update_option( 'woocommerce_' . Settings::GATEWAY_ID . '_settings', array( 'enabled' => 'yes', 'api_key' => 'sup_sk_conformance', 'wcpos_connection' => 'server' ) );
+		update_option( 'woocommerce_' . Settings::GATEWAY_ID . '_settings', array( 'enabled' => 'yes', 'api_key' => 'sup_sk_conformance', 'wcpos_connection' => 'server', 'affiliate_app_id' => 'com.wcpos.conformance', 'affiliate_key' => 'affiliate-conformance' ) );
 		delete_transient( 'sumup_profile_' . md5( 'sup_sk_conformance' ) );
 		$this->transport                   = new Fake_SumUp_Transport();
 		Recording_SumUp_Provider::$fixture = $this;

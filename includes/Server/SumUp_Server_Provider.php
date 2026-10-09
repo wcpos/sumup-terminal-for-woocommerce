@@ -38,6 +38,13 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	/** Prefix of the client id the adapter uses for a checkout SumUp did not answer for. */
 	private const UNANSWERED_PREFIX = 'row-';
 
+	/**
+	 * How long the markers of an unanswered checkout live. Its leg is ended through Free's deadline
+	 * and the ten-minute sweep, which can be many minutes after the checkout; a marker that expired
+	 * first would leave the leg pending for good.
+	 */
+	private const UNANSWERED_MARKER_TTL = DAY_IN_SECONDS;
+
 	/** Merchant profile.
 	 *
 	 * @var ProfileService
@@ -173,9 +180,12 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				// the row by webhook if it is paid. Free appends "Provider did not answer" to the stored
 				// row's events on an unanswered create: that is the replay signal.
 				if ( ! empty( $row['events'] ) ) {
-					$unanswered = self::UNANSWERED_PREFIX . $row['id'];
+					$unanswered = self::unanswered_id( (string) $row['id'] );
 					if ( false === get_transient( self::marker_key( 'checkout', $unanswered ) ) ) {
-						self::remember( 'checkout', $unanswered );
+						// The start marker is gone (evicted, or never written): the checkout is of unknown
+						// age, so it counts as older than the grace, never as new. A cancel then records
+						// itself without terminating a reader that may be on another sale by now.
+						set_transient( self::marker_key( 'checkout', $unanswered ), microtime( true ) - self::UNANSWERED_GRACE_SECONDS - 1, self::UNANSWERED_MARKER_TTL );
 					}
 					return array(
 						'ref' => ( $row['provider_refs']['reader'] ?? $reader_id ) . ':' . $unanswered,
@@ -198,7 +208,7 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 					if ( $http < 400 || $http >= 500 ) {
 						// Sent and not answered (transport failure, timeout, an outage): the checkout may
 						// be on the reader. Pro replays the row; the replay above polls it from this moment.
-						self::remember( 'checkout', self::UNANSWERED_PREFIX . $row['id'] );
+						self::remember( 'checkout', self::unanswered_id( (string) $row['id'] ) );
 						return $this->indeterminate( 'sumup_checkout_unanswered', $last->get_error_message() );
 					}
 					// A refused checkout (422: a currency this merchant cannot take) must reach the
@@ -231,6 +241,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		return $this->call(
 			function () use ( $ref ) {
 				list( $reader_id, $client_id ) = array_pad( explode( ':', $ref, 2 ), 2, '' );
+				if ( 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ) {
+					return $this->fetch_unanswered( $client_id );
+				}
 				$transaction = $this->lookup( $client_id );
 				if ( is_wp_error( $transaction ) ) {
 					return $transaction;
@@ -280,7 +293,8 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 			return;
 		}
 		// Sub-second, so a delivery and a terminate in the same second keep their order.
-		if ( ! set_transient( self::marker_key( $what, $client_id ), microtime( true ), 15 * MINUTE_IN_SECONDS ) ) {
+		$ttl = 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ? self::UNANSWERED_MARKER_TTL : 15 * MINUTE_IN_SECONDS;
+		if ( ! set_transient( self::marker_key( $what, $client_id ), microtime( true ), $ttl ) ) {
 			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
 			// these markers existed: slower for the cashier, never wrong about money.
 			Logger::log( "SumUp $what marker for $client_id could not be written; the cancel confirms at the deadline." );
@@ -312,18 +326,6 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		if ( false === $started && false === $terminated ) {
 			return false;
 		}
-		if ( 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ) {
-			// A checkout SumUp did not answer for: an idle reader with no transaction also describes
-			// a paid checkout SumUp has not listed yet, so the leg ends only on SumUp's own word that
-			// the row's checkout ended without money, or after the store's own terminate plus the
-			// long grace below; never on the reader alone.
-			if ( false !== get_transient( self::marker_key( 'ended', $client_id ) ) ) {
-				return true;
-			}
-			if ( false === $terminated ) {
-				return false;
-			}
-		}
 		// The grace runs from the latest thing that happened; the reader's activity is measured
 		// from the checkout's start, because terminating a checkout the reader already dropped
 		// (its own timeout) produces no new activity on the device.
@@ -331,8 +333,7 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		$since  = false !== $started ? (int) $started : (int) $terminated;
 		$ended  = get_transient( self::marker_key( 'ended', $client_id ) );
 		$reported = false !== $terminated && false !== $ended && (float) $ended > (float) $terminated;
-		$grace    = 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ? self::UNANSWERED_GRACE_SECONDS : self::TERMINATE_GRACE_SECONDS;
-		if ( ! $reported && time() - $latest < $grace ) {
+		if ( ! $reported && time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
 			return false;
 		}
 		$status = $this->readers->get_status( $reader_id );
@@ -358,6 +359,72 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 			return;
 		}
 		set_transient( self::marker_key( 'checkout', $client_id ), (float) $started, 15 * MINUTE_IN_SECONDS );
+	}
+
+	/**
+	 * The adapter's own client id for a checkout SumUp did not answer for: keyed on the row.
+	 *
+	 * @param string $payment_id Ledger row id.
+	 */
+	private static function unanswered_id( string $payment_id ): string {
+		return self::UNANSWERED_PREFIX . strtolower( $payment_id );
+	}
+
+	/**
+	 * Poll a checkout SumUp did not answer for. SumUp cannot be asked about it by client id, so:
+	 * with affiliate keys the checkout carried the row id as foreign_transaction_id and a paid one
+	 * is found that way; otherwise the leg ends only after the store's own cancel (Free's deadline,
+	 * or the cashier), once SumUp has delivered that the row's checkout ended without money or the
+	 * grace has passed, since an idle reader with no transaction also describes a paid checkout
+	 * SumUp has not listed yet. Never on the reader alone, never on an unsigned delivery alone.
+	 *
+	 * @param string $client_id The adapter's row-keyed id.
+	 * @return array Normalized observation.
+	 */
+	private function fetch_unanswered( string $client_id ): array {
+		$found = $this->paid_unanswered( $client_id );
+		if ( null !== $found ) {
+			return self::normalize( $found );
+		}
+		$observation = self::normalize( array() );
+		$terminated  = get_transient( self::marker_key( 'terminated', $client_id ) );
+		if ( false === $terminated ) {
+			return $observation;
+		}
+		if ( false !== get_transient( self::marker_key( 'ended', $client_id ) ) || microtime( true ) - (float) $terminated >= self::UNANSWERED_GRACE_SECONDS ) {
+			$observation['status']         = 'cancelled';
+			$observation['failure_reason'] = 'expired';
+		}
+		return $observation;
+	}
+
+	/**
+	 * The paid transaction of a checkout SumUp did not answer for, when the merchant's affiliate
+	 * keys let the checkout carry the row id as foreign_transaction_id; null otherwise, or when
+	 * SumUp lists none yet or cannot be asked.
+	 *
+	 * @param string $client_id The adapter's row-keyed id.
+	 */
+	private function paid_unanswered( string $client_id ): ?array {
+		$affiliate = Settings::affiliate();
+		if ( '' === $affiliate['app_id'] || '' === $affiliate['key'] ) {
+			return null;
+		}
+		$row_id = substr( $client_id, strlen( self::UNANSWERED_PREFIX ) );
+		try {
+			$response = $this->transactions->find_by_foreign_transaction_id( $row_id );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		if ( ! is_array( $response ) ) {
+			return null;
+		}
+		foreach ( $response['items'] ?? array( $response ) as $transaction ) {
+			if ( 'SUCCESSFUL' === ( $transaction['status'] ?? '' ) && ( $transaction['foreign_transaction_id'] ?? $row_id ) === $row_id ) {
+				return $transaction;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -448,13 +515,15 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( in_array( $status, array( 'FAILED', 'CANCELLED' ), true ) ) {
 					return 'final';
 				}
-				$held = 0 === strpos( $parts[1] ?? '', self::UNANSWERED_PREFIX );
-				if ( $held ) {
+				if ( 0 === strpos( $parts[1] ?? '', self::UNANSWERED_PREFIX ) ) {
+					if ( null !== $this->paid_unanswered( $parts[1] ) ) {
+						return 'requested'; // The money is listed: the next poll captures it.
+					}
 					$started = get_transient( self::marker_key( 'checkout', $parts[1] ) );
 					if ( false === $started || microtime( true ) - (float) $started > self::UNANSWERED_GRACE_SECONDS ) {
 						// SumUp holds a checkout on the reader for about a minute: this one is over, and
 						// a terminate now would reach whatever sale the reader is on. The store's cancel
-						// is recorded without being sent; the poll concludes from the reader after the grace.
+						// is recorded without being sent; the poll concludes after the grace.
 						self::remember_terminated( $parts[1] );
 						return 'requested';
 					}
@@ -462,7 +531,16 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				$result = $this->readers->cancel_checkout( $parts[0] );
 				// Terminate is asynchronous; acceptance never proves that money was not taken.
 				if ( false === $result || is_wp_error( $result ) ) {
-					return self::error( $result );
+					$last = is_wp_error( $result ) ? $result : $this->readers->last_error();
+					$data = $last ? $last->get_error_data() : null;
+					$http = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+					if ( $http >= 400 && $http < 500 ) {
+						// The reader is not waiting for a card: there is nothing to terminate, the
+						// checkout already ended. The poll confirms it from the reader, as after a terminate.
+						self::remember_terminated( $parts[1] ?? '' );
+						return 'requested';
+					}
+					return self::error( $last ?? $result );
 				}
 				// The next poll confirms the cancel when SumUp still has no transaction (see fetch()).
 				self::remember_terminated( $parts[1] ?? '' );
@@ -486,7 +564,8 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( 0 === strpos( $id, self::UNANSWERED_PREFIX ) ) {
 					// The checkout SumUp did not answer for was paid and settled by its delivery, which
 					// recorded the client transaction id against the row.
-					$id = (string) get_option( self::settled_key( (string) $row['id'] ), '' );
+					$found = $this->paid_unanswered( $id );
+					$id    = null !== $found ? (string) ( $found['client_transaction_id'] ?? '' ) : (string) get_option( self::settled_key( strtolower( (string) $row['id'] ) ), '' );
 				}
 				$transaction = $this->lookup( $id );
 				if ( is_wp_error( $transaction ) ) {
@@ -519,11 +598,16 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				$id     = $query['payment'] ?? '';
 				$reader = is_string( $query['reader'] ?? null ) ? $query['reader'] : '';
 				$valid  = is_string( $id ) && preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id );
-				if ( ! $valid && '' === $reader ) {
-					// Not a delivery for a POS payment: acknowledged so SumUp stops retrying.
+				$event  = $request->get_json_params();
+				// The reference is looked up locally BEFORE any outbound call: an attempt Pro adopted
+				// carries a row id the URL cannot know, and the action reference (reader and client
+				// transaction id) resolves it. A delivery naming neither a POS payment nor an adopted
+				// attempt is acknowledged so SumUp stops retrying, and asks SumUp nothing.
+				$client  = $event['payload']['client_transaction_id'] ?? '';
+				$adopted = '' !== $reader && is_string( $client ) && '' !== $client && \function_exists( 'wcpos_pro_payment_id_for_action' ) ? wcpos_pro_payment_id_for_action( $this->provider(), $reader . ':' . $client ) : null;
+				if ( ! $valid && ! ( is_string( $adopted ) && '' !== $adopted ) ) {
 					return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
 				}
-				$event = $request->get_json_params();
 				if ( 'solo.transaction.updated' !== ( $event['event_type'] ?? '' ) ) {
 					return new \WP_Error( 'sumup_webhook_ignored', 'Event type not handled.', array( 'status' => 200 ) );
 				}
@@ -542,32 +626,32 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				if ( ! is_string( $client_id ) || '' === $client_id ) {
 					return new \WP_Error( 'sumup_webhook_invalid', 'Missing client transaction ID.', array( 'status' => 400 ) );
 				}
-				// An attempt Pro adopted carries a row id the URL cannot know; the action reference
-				// (reader and client transaction id) resolves it. Only after the merchant check above.
-				$adopted = '' !== $reader && \function_exists( 'wcpos_pro_payment_id_for_action' ) ? wcpos_pro_payment_id_for_action( $this->provider(), $reader . ':' . $client_id ) : null;
 				if ( is_string( $adopted ) && '' !== $adopted ) {
-					$id = $adopted;
-				} elseif ( ! $valid ) {
-					return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
-				}
-				// SumUp says the checkout ended without money: the poll may confirm our terminate at
-				// once. A successful (or unknown) delivery must not — SumUp may not list the
-				// transaction yet, and an IDLE reader would read as cancelled while the money moved.
-				if ( in_array( strtolower( (string) ( $event['payload']['status'] ?? '' ) ), array( 'failed', 'cancelled' ), true ) ) {
-					self::remember( 'ended', $client_id );
-					if ( is_string( $id ) && '' !== $id ) {
-						// A row whose create SumUp did not answer knows no client id; its poll reads this.
-						self::remember( 'ended', self::UNANSWERED_PREFIX . strtolower( $id ) );
-					}
+					$id = $adopted; // Settled only now, after the merchant check: the adopted row's id.
 				}
 				// The authenticated lookup, never the unsigned body, is the money evidence.
 				$transaction = $this->lookup( $client_id );
 				if ( is_wp_error( $transaction ) ) {
 					return $transaction;
 				}
+				$paid     = is_array( $transaction ) && 'SUCCESSFUL' === ( $transaction['status'] ?? '' );
+				$held_key = is_string( $id ) ? self::unanswered_id( $id ) : '';
+				// SumUp says the checkout ended without money: the poll may confirm our terminate at
+				// once. A successful (or unknown) delivery must not — SumUp may not list the
+				// transaction yet, and an IDLE reader would read as cancelled while the money moved.
+				if ( in_array( strtolower( (string) ( $event['payload']['status'] ?? '' ) ), array( 'failed', 'cancelled' ), true ) ) {
+					self::remember( 'ended', $client_id );
+					// A row whose create SumUp did not answer knows no client id; its poll reads this
+					// marker, and only after the store's own cancel (the delivery is unsigned: alone it
+					// never ends a leg), and only when the lookup does not contradict it.
+					if ( '' !== $held_key && ! $paid ) {
+						self::remember( 'ended', $held_key );
+					}
+				}
 				$patch = self::webhook_patch( $event, $transaction );
-				if ( 'captured' === ( $patch['status'] ?? '' ) ) {
-					// A row whose create SumUp did not answer knows no client id; its refund reads this.
+				if ( 'captured' === ( $patch['status'] ?? '' ) && '' !== $held_key && false !== get_transient( self::marker_key( 'checkout', $held_key ) ) ) {
+					// Only a row whose create SumUp did not answer (its start marker exists) knows no
+					// client id; its refund reads this. Ordinary rows carry the id in their action.
 					update_option( self::settled_key( strtolower( $id ) ), $client_id, false );
 				}
 				return array(
