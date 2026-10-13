@@ -66,20 +66,21 @@ class SumUp_Device_Provider extends \WCPOS\WooCommercePOSPro\Payments\Device\Abs
 	 */
 	public function describe( \WC_Payment_Gateway $gateway ): array {
 		$affiliate = Settings::affiliate();
+		$offline = Settings::offline_payments() ? 'queue' : 'none';
 		return array(
 			'hardware' => array(
 				'discovery' => 'sdk',
 				'transports' => array(
 					array(
 						'transport' => 'bluetooth',
-						'offline' => 'none',
+						'offline' => $offline,
 						'tips' => 'on_reader',
 					),
 				),
 			),
 			'capabilities' => array(
 				'tips' => 'on_reader',
-				'offline' => 'none',
+				'offline' => $offline,
 				'refunds' => array(
 					'via' => 'provider',
 					'partial' => true,

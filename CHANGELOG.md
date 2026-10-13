@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- New gateway setting, **Offline card payments** (off by default): with it on, a Bluetooth Solo or Solo Lite can take card payments while the POS is offline (the POS app checks the reader model). SumUp must enable offline payments on the merchant account first; an offline payment can be declined when it uploads, and the merchant carries that risk.
 - A POS checkout SumUp did not answer (a dropped connection, a timeout, an outage) now keeps the leg pending instead of dropping it while the checkout may be on the reader. A retry of that leg sends nothing more to the reader: the first checkout settles the leg through its result URL if the customer pays it (or, with affiliate keys set, through SumUp's transaction list), and the leg ends only after the till's or the deadline's own cancel, so a payment SumUp has not listed yet is never written off.
 - A refund from the POS of an order paid on the previous order-pay panel finds the SumUp transaction by the order's transaction id.
 - A result delivery for an attempt the POS adopted on upgrade resolves to that attempt; a delivery for no POS payment is still acknowledged so SumUp stops retrying.

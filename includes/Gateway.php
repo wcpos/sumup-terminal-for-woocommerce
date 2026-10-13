@@ -139,6 +139,17 @@ class Gateway extends WC_Payment_Gateway {
 				'default' => Settings::get_wcpos_connection(),
 				'description' => __( 'Choose whether the POS app connects by Bluetooth or the store connects to a Solo over the cloud.', 'sumup-terminal-for-woocommerce' ),
 			),
+			'offline_payments' => array(
+				'title' => __( 'Offline card payments', 'sumup-terminal-for-woocommerce' ),
+				'type' => 'checkbox',
+				'label' => __( 'Let a Bluetooth Solo or Solo Lite take card payments while the POS is offline.', 'sumup-terminal-for-woocommerce' ),
+				'description' => sprintf(
+					/* translators: %s: documentation URL. */
+					__( 'Offline payments are approved by the reader and can be declined when they upload; your business carries that risk. SumUp must enable them on your account first. <a href="%s">Learn more</a>', 'sumup-terminal-for-woocommerce' ),
+					'https://docs.wcpos.com/payment/gateways/sumup-terminal#offline-payments'
+				),
+				'default' => 'no',
+			),
 			'default_reader' => $this->default_terminal_field(),
 			'allowed_readers' => $this->enabled_terminals_field(),
 			'lock_to_default' => array(
