@@ -21,6 +21,7 @@ expect( isset( $fields['default_reader'], $fields['allowed_readers'], $fields['l
 expect( 'select' === $fields['default_reader']['type'], 'loaded default is a select' );
 expect( 'multiselect' === $fields['allowed_readers']['type'] && 'wc-enhanced-select' === $fields['allowed_readers']['class'], 'enhanced multiselect' );
 expect( 'checkbox' === $fields['lock_to_default']['type'], 'lock checkbox' );
+expect( 'checkbox' === $fields['offline_payments']['type'] && 'no' === $fields['offline_payments']['default'] && false !== strpos( $fields['offline_payments']['description'], 'docs.wcpos.com' ), 'offline opt-in is off by default and links its docs' );
 expect( array( 'one' => 'Till (one)', 'two' => 'Virtual (two)' ) === $fields['allowed_readers']['options'], 'provider projection reused, including Virtual Solo' );
 $keys = array_keys( $fields );
 expect( array_search( 'affiliate_key', $keys ) < array_search( 'default_reader', $keys ) && array_search( 'lock_to_default', $keys ) < array_search( 'show_payment_logs', $keys ), 'reader fields follow credentials' );

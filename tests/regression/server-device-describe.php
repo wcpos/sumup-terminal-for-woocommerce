@@ -17,6 +17,12 @@ expect( 'sumup' === $provider->provider(), 'SumUp provider identity' );
 expect( array( 'discovery' => 'sdk', 'transports' => array( array( 'transport' => 'bluetooth', 'offline' => 'none', 'tips' => 'on_reader' ) ) ) === $described['hardware'], 'SDK discovers Bluetooth readers' );
 expect( array( 'tips' => 'on_reader', 'offline' => 'none', 'refunds' => array( 'via' => 'provider', 'partial' => true ) ) === $described['capabilities'], 'device capabilities' );
 expect( array( 'merchant_code' => 'M123', 'affiliate_app_id' => 'app' ) === $described['provider_data'], 'public metadata excludes affiliate key' );
+foreach ( array( 'yes' => 'queue', 'no' => 'none', '' => 'none' ) as $setting => $offline ) {
+	$options['woocommerce_' . Settings::GATEWAY_ID . '_settings']['offline_payments'] = $setting;
+	$opted = $provider->describe( $gateway );
+	expect( $offline === $opted['hardware']['transports'][0]['offline'] && $offline === $opted['capabilities']['offline'], "offline opt-in '$setting' declares $offline" );
+}
+unset( $options['woocommerce_' . Settings::GATEWAY_ID . '_settings']['offline_payments'] );
 expect( array( 'handoff' => array( 'affiliate_key' => 'affiliate-test', 'merchant_code' => 'M123' ), 'expires_at' => null ) === $provider->bootstrap( $gateway, array() ), 'SDK bootstrap credentials' );
 foreach ( array( false, new WP_Error( 'unavailable', 'Unavailable' ), new RuntimeException( 'Unavailable' ) ) as $profile->result ) {
 	expect( null === $provider->describe( $gateway )['provider_data']['merchant_code'], 'unknown merchant is null' );

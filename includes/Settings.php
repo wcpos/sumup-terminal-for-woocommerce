@@ -40,6 +40,15 @@ class Settings {
 		return self::get_gateway_settings()['wcpos_connection'] ?? 'server';
 	}
 
+	/**
+	 * Whether the merchant opted in to offline card payments on a Bluetooth Solo or Solo Lite.
+	 * SumUp enables offline per merchant account and no SDK call reports it, so the merchant
+	 * says so here; the POS app still refuses offline on any other reader (roadmap#427).
+	 */
+	public static function offline_payments(): bool {
+		return 'yes' === ( self::get_gateway_settings()['offline_payments'] ?? 'no' );
+	}
+
 	/** Whether the installed WCPOS Pro carries the device-provider contract this adapter needs. */
 	public static function device_mode_available(): bool {
 		return \function_exists( 'wcpos_pro_register_device_provider' );
