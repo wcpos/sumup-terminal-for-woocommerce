@@ -158,21 +158,25 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		);
 	}
 
+	/**
+	 * Reader status never goes through the SDK.
+	 *
+	 * The SDK decodes the reader state into an enum that rejects anything SumUp has not
+	 * documented, and a Solo reports `PROCESSING` between card tap and result (absent from
+	 * sumup-php through v0.1.7). Status is polled every two seconds while the cashier waits,
+	 * so the SDK path cost a thrown ValueError, a log line and a second round trip on every
+	 * poll in exactly that window. The caller reads the body as a plain array anyway.
+	 *
+	 * @param string $reader_id Reader ID.
+	 *
+	 * @return array|false Status response or false on failure.
+	 */
 	public function get_status( $reader_id ) {
-		$merchant_id = $this->ensure_merchant_id();
-		if ( ! $merchant_id ) {
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
-		return $this->sdk_call(
-			'get reader status',
-			function () use ( $merchant_id, $reader_id ) {
-				return $this->normalize_status( $this->get_readers_service()->getStatus( $merchant_id, $reader_id ) );
-			},
-			function () use ( $reader_id ) {
-				return $this->fallback->get_status( $reader_id );
-			}
-		);
+		return $this->fallback->get_status( $reader_id );
 	}
 
 	public function connect( $reader_id ) {
@@ -232,11 +236,6 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 				'identifier' => $reader->device->identifier ?? null,
 			),
 		);
-	}
-
-	/** Same key shape as the HTTP client (`last_activity`, not `lastActivity`): callers read one. */
-	private function normalize_status( $status ) {
-		return $this->snake_case_array_keys( json_decode( wp_json_encode( $status ), true ) );
 	}
 
 	private function normalize_checkout_response( $response ) {
