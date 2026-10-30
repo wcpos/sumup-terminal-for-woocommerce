@@ -1,9 +1,16 @@
 name: Release
 
+# A stable release is cut by a push to `main` whose plugin header carries a new X.Y.Z.
+# A beta is cut by dispatching this workflow on `next` with an X.Y.Z-betaN header: it is
+# published as a GitHub prerelease, which `releases/latest` never returns, so the
+# extension catalog and every merchant's updater never see it. Beta testers install
+# the zip by hand. The two guards below keep the lanes apart: a push never cuts a beta
+# and a dispatch never cuts a stable.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,10 +30,26 @@ jobs:
       - name: Check if version has changed
         id: check_version
         run: |
-          VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*" sumup-terminal-for-woocommerce.php)
+          set -euo pipefail
+
+          VERSION=$(grep -oP "Version:\s*\K[0-9]+\.[0-9]+\.[0-9]+(-beta[0-9]+)?" sumup-terminal-for-woocommerce.php)
+          if [[ "$VERSION" == *-beta* ]]; then
+            if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+              echo "::error::$VERSION is a beta; a beta is cut only by dispatching this workflow, never by a push to main"
+              exit 1
+            fi
+            PRERELEASE=true
+          else
+            if [ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]; then
+              echo "::error::$VERSION is a stable version; a stable release is cut only by a push to main"
+              exit 1
+            fi
+            PRERELEASE=false
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "PRERELEASE=$PRERELEASE" >> "$GITHUB_ENV"
           git fetch --prune --unshallow
-          if git tag | grep -q "v$VERSION"; then
+          if git tag | grep -qx "v$VERSION"; then
             echo "Version has not changed. Skipping release..."
             echo "release=false" >> "$GITHUB_OUTPUT"
           else
@@ -40,22 +63,41 @@ jobs:
 
       - name: Create Release
         if: steps.check_version.outputs.release == 'true'
-        id: create_release
-        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1
+        run: |
+          set -euo pipefail
+          NOTES_FILE="docs/releases/$VERSION.md"
+          NOTES_ARGS=(--notes "Release v$VERSION")
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES_ARGS=(--notes-file "$NOTES_FILE")
+          elif [ "$PRERELEASE" = "true" ]; then
+            # A beta is the unreleased work; its notes are the CHANGELOG's Unreleased section as it stands.
+            awk '/^## / { if (found) exit; if ($0 == "## Unreleased") found=1; next } found { print }' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+            if [ -s "$RUNNER_TEMP/release-notes.md" ]; then
+              NOTES_ARGS=(--notes-file "$RUNNER_TEMP/release-notes.md")
+            fi
+          fi
+          PRERELEASE_ARGS=()
+          if [ "$PRERELEASE" = "true" ]; then
+            PRERELEASE_ARGS=(--prerelease)
+          fi
+          gh release create "v$VERSION" --title "Release v$VERSION" "${NOTES_ARGS[@]}" "${PRERELEASE_ARGS[@]}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ env.VERSION }}
-          release_name: Release v${{ env.VERSION }}
-          body_path: docs/releases/${{ env.VERSION }}.md
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and upload ZIP
         if: steps.check_version.outputs.release == 'true'
         run: |
           rm -rf packages # Remove the packages folder
-          zip -r sumup-terminal-for-woocommerce.zip . -x "*.git*"
+          # WordPress 7.1.4+ unpacks packages into a randomly suffixed folder and installs a flat zip
+          # there, so the zip must hold the installed folder (catalog slug) as its only top-level entry.
+          mkdir -p "$RUNNER_TEMP/stage/sumup-terminal-for-woocommerce"
+          rsync -a --exclude='.git*' ./ "$RUNNER_TEMP/stage/sumup-terminal-for-woocommerce/"
+          (cd "$RUNNER_TEMP/stage" && zip -r "$GITHUB_WORKSPACE/sumup-terminal-for-woocommerce.zip" "sumup-terminal-for-woocommerce" -x "*.git*")
+          TOP_LEVEL=$(unzip -Z1 sumup-terminal-for-woocommerce.zip | cut -d/ -f1 | sort -u)
+          if [ "$TOP_LEVEL" != "sumup-terminal-for-woocommerce" ]; then
+            echo "::error::sumup-terminal-for-woocommerce.zip must contain only sumup-terminal-for-woocommerce/ at the top level, found: $TOP_LEVEL"
+            exit 1
+          fi
           gh release upload v${{ env.VERSION }} sumup-terminal-for-woocommerce.zip --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
