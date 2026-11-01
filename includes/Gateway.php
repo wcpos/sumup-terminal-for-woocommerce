@@ -659,7 +659,7 @@ class Gateway extends WC_Payment_Gateway {
 				$actions .= '<p>' . __( 'To pair your Solo reader:', 'sumup-terminal-for-woocommerce' ) . '</p>';
 				$actions .= '<ol>';
 				$actions .= '<li>' . __( 'Turn on the reader (do not log in)', 'sumup-terminal-for-woocommerce' ) . '</li>';
-				$actions .= '<li>' . __( 'Open menu → Connections → API → Connect', 'sumup-terminal-for-woocommerce' ) . '</li>';
+				$actions .= '<li>' . __( 'Open menu → Connections → API → Connect. If Cloud API is not shown, log out of your SumUp account on the reader, then check the menu again.', 'sumup-terminal-for-woocommerce' ) . '</li>';
 				$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 				$actions .= '</ol>';
 				$actions .= '<p>';
@@ -718,7 +718,7 @@ class Gateway extends WC_Payment_Gateway {
 			$actions .= '<p>' . __( 'To pair another Solo reader:', 'sumup-terminal-for-woocommerce' ) . '</p>';
 			$actions .= '<ol>';
 			$actions .= '<li>' . __( 'Turn on the reader (do not log in)', 'sumup-terminal-for-woocommerce' ) . '</li>';
-			$actions .= '<li>' . __( 'Open menu → Connections → API → Connect', 'sumup-terminal-for-woocommerce' ) . '</li>';
+			$actions .= '<li>' . __( 'Open menu → Connections → API → Connect. If Cloud API is not shown, log out of your SumUp account on the reader, then check the menu again.', 'sumup-terminal-for-woocommerce' ) . '</li>';
 			$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 			$actions .= '</ol>';
 			$actions .= '<p>';
@@ -739,7 +739,7 @@ class Gateway extends WC_Payment_Gateway {
 			$actions .= '<p>' . __( 'To pair your Solo reader:', 'sumup-terminal-for-woocommerce' ) . '</p>';
 			$actions .= '<ol>';
 			$actions .= '<li>' . __( 'Turn on the reader (do not log in)', 'sumup-terminal-for-woocommerce' ) . '</li>';
-			$actions .= '<li>' . __( 'Open menu → Connections → API → Connect', 'sumup-terminal-for-woocommerce' ) . '</li>';
+			$actions .= '<li>' . __( 'Open menu → Connections → API → Connect. If Cloud API is not shown, log out of your SumUp account on the reader, then check the menu again.', 'sumup-terminal-for-woocommerce' ) . '</li>';
 			$actions .= '<li>' . __( 'Enter the pairing code below:', 'sumup-terminal-for-woocommerce' ) . '</li>';
 			$actions .= '</ol>';
 			$actions .= '<p>';

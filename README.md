@@ -12,6 +12,8 @@
 
 5. Pair your SumUp Terminal: On the same settings page, enter the pairing code displayed on your SumUp device and click "Pair Reader". The reader must be successfully paired before you can process payments.
 
+   **Don’t see “Cloud API” on your SumUp Solo?** Log out of your SumUp account on the reader, then check the menu again.
+
 6. Go to `WP Admin > WooCommerce POS > Settings > Checkout > enable` the SumUp Terminal gateway.
 <img alt="enable-sumup-terminal" src="https://github.com/user-attachments/assets/9a0ed9a6-52d4-4d9a-9269-77182c5f94f7" />
 
