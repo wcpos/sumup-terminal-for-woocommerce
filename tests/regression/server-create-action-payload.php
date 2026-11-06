@@ -31,9 +31,15 @@ foreach ( array( array( '', 'key' ), array( 'app', '' ), array( 'app', 'key' ) )
 	if ( $settings[0] && $settings[1] ) { expect( array( 'app_id' => 'app', 'key' => 'key', 'foreign_transaction_id' => server_row()['id'] ) === $payload['affiliate'], 'affiliate attribution' ); }
 	else { expect( ! isset( $payload['affiliate'] ), 'both affiliate settings required' ); }
 }
-foreach ( array( array(), false, new WP_Error( 'busy', 'Busy' ), new RuntimeException( 'bad' ) ) as $readers->checkout_result ) {
+foreach ( array( false, new WP_Error( 'busy', 'Busy' ), new RuntimeException( 'bad' ) ) as $readers->checkout_result ) {
 	provider_error_expect( $provider->create_reader_action( server_row(), 'reader' ), is_wp_error( $readers->checkout_result ) ? 'busy' : 'sumup_api_error' );
 }
+// A 2xx that names no checkout: SumUp took the POST, so the checkout may be on the reader and the
+// leg stays pending (Pro replays the row), never a final error.
+$readers->checkout_result = array();
+$pending = $provider->create_reader_action( server_row(), 'reader' );
+expect( is_wp_error( $pending ) && 'sumup_checkout_unanswered' === $pending->get_error_code(), 'a checkout without a client transaction id is unanswered, not final' );
+expect( true === ( $pending->get_error_data()['indeterminate'] ?? false ), 'a checkout without a client transaction id is indeterminate' );
 // SumUp refusing the checkout (the live run's 422 for a GBP row on an EUR merchant): the till gets
 // SumUp's words and the 4xx, so it stops instead of retrying as a dropped connection.
 $readers->checkout_result = false;
