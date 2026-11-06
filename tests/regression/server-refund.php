@@ -41,10 +41,50 @@ foreach ( array( server_transaction( 'PENDING' ), array(), array_merge( server_t
 	expect( array() === $requests, 'unconfirmed transaction not refunded' );
 }
 $transactions->result = server_transaction();
-foreach ( array( array( new WP_Error( 'timeout', 'Timed out' ), 'timeout' ), array( new RuntimeException( 'bad' ), 'sumup_api_error' ), array( array( 'response' => array( 'code' => 400 ), 'body' => '{"message":"Rejected"}' ), 'sumup_refund_rejected' ) ) as $case ) {
-	list( $response, $expected ) = $case;
+// SumUp's refund has no idempotency key: an answer that does not prove a refusal may follow a refund
+// SumUp made, so it keeps Free's reservation (indeterminate) instead of freeing the amount for a retry.
+function refund_unanswered_expect( $result, $label ) {
+	expect( is_wp_error( $result ) && 'sumup_refund_unanswered' === $result->get_error_code(), "$label: unanswered code" );
+	expect( true === ( $result->get_error_data()['indeterminate'] ?? null ), "$label: indeterminate" );
+}
+$http = function ( $code, $body = '' ) { return array( 'response' => array( 'code' => $code ), 'body' => $body ); };
+$unclear = array(
+	'timeout' => new WP_Error( 'timeout', 'Timed out' ),
+	'http_request_failed' => new WP_Error( 'http_request_failed', 'cURL error 28' ),
+	'throw' => new RuntimeException( 'bad' ),
+	'thrown Error' => new Error( 'bad' ),
+	'transport error carrying a 4xx status' => new WP_Error( 'http_request_failed', 'Proxy refused', array( 'status' => 403 ) ),
+);
+foreach ( array( 500, 502, 503, 599, 201, 302 ) as $code ) { $unclear[ "HTTP $code" ] = $http( $code, '{"message":"Upstream"}' ); }
+foreach ( $unclear as $label => $response ) {
+	$requests = array();
+	refund_unanswered_expect( $provider->refund( server_row(), 45, '12.30' ), $label );
+	expect( 1 === count( $requests ) && 'https://api.sumup.com/v0.1/me/refund/txn-123' === $requests[0][0], "$label: the refund POST was made" );
+}
+foreach ( array( 400, 404, 409, 422, 499 ) as $code ) {
+	$requests = array();
+	$response = $http( $code, '{"message":"Rejected ' . $code . '"}' );
 	$result = $provider->refund( server_row(), 45, '12.30' );
-	provider_error_expect( $result, $expected );
-	if ( 'sumup_refund_rejected' === $expected ) { expect( 'Rejected' === $result->get_error_message(), "SumUp's reason is surfaced" ); }
+	provider_error_expect( $result, 'sumup_refund_rejected' );
+	expect( ! array_key_exists( 'indeterminate', $result->get_error_data() ), "HTTP $code: a refusal is not indeterminate" );
+	expect( "Rejected $code" === $result->get_error_message(), "HTTP $code: SumUp's reason is surfaced" );
+	expect( 1 === count( $requests ), "HTTP $code: the refund POST was made" );
+}
+// A refund client answering false (no answer it could name) is unclear too.
+class FalseRefunds extends WCPOS\WooCommercePOS\SumUpTerminal\Services\RefundClient {
+	public $calls = 0;
+	public function refund( string $transaction_id, ?float $amount ) { $this->calls++; return false; }
+}
+$false_refunds = new FalseRefunds( 'test' );
+$false_provider = new WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider( $profile, new WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService( 'test', $readers ), $transactions, $false_refunds );
+refund_unanswered_expect( $false_provider->refund( server_row(), 45, '12.30' ), 'false' );
+expect( 1 === $false_refunds->calls, 'false: the refund client was called' );
+// Before the POST nothing was sent: a lookup that fails or throws is a refusal, and no refund is placed.
+foreach ( array( false, new RuntimeException( 'lookup down' ) ) as $transactions->result ) {
+	$requests = array();
+	$result = $provider->refund( server_row(), 45, '12.30' );
+	provider_error_expect( $result, 'sumup_api_error' );
+	expect( ! array_key_exists( 'indeterminate', $result->get_error_data() ), 'a failed lookup is not indeterminate' );
+	expect( array() === $requests, 'a failed lookup places no refund' );
 }
 echo "server-refund ok\n";
