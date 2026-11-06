@@ -651,12 +651,28 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				}
 				$currency = strtoupper( $transaction['currency'] ?? $row['currency'] );
 				$full = isset( $transaction['amount'] ) && Money_Units::minor( $amount, $currency ) === Money_Units::minor( (string) $transaction['amount'], $currency );
-				// SumUp has no refund idempotency: Free's row + refund-id replay guard is the only one.
-				$result = $this->refunds->refund( $transaction['id'], $full ? null : (float) $amount );
-				return false === $result || is_wp_error( $result ) ? self::error( $result ) : array(
-					'status' => 'succeeded',
-					'provider_ref' => $transaction['id'],
-				);
+				// SumUp's refund has no idempotency key, so a refund sent again is a second refund. Only a
+				// 4xx proves SumUp refused it: that error frees the amount for a retry. Any other answer (a
+				// throw, no response, a 5xx, an unexpected 2xx or 3xx) may follow a refund SumUp made, so
+				// it is indeterminate: Free keeps the reservation until staff confirm it in SumUp.
+				try {
+					$result = $this->refunds->refund( $transaction['id'], $full ? null : (float) $amount );
+				} catch ( \Throwable $e ) {
+					$result = null;
+				}
+				if ( true === $result ) {
+					return array(
+						'status' => 'succeeded',
+						'provider_ref' => $transaction['id'],
+					);
+				}
+				$refused = is_wp_error( $result ) && 'sumup_refund_rejected' === $result->get_error_code();
+				$data    = $refused ? $result->get_error_data() : null;
+				$http    = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+				if ( $http >= 400 && $http < 500 ) {
+					return self::error( $result );
+				}
+				return $this->indeterminate( 'sumup_refund_unanswered', 'SumUp gave no clear answer to the refund, so it may have gone through. Check the transaction in SumUp before refunding again.' );
 			}
 		);
 	}
