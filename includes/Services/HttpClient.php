@@ -237,8 +237,17 @@ class HttpClient {
 		}
 
 		$decoded = json_decode( $body, true );
+		if ( ! is_array( $decoded ) ) {
+			// SumUp took the request and answered with something unreadable: it was sent, so the
+			// failure is recorded (a false with no last_error means nothing was sent).
+			$error_message = "SumUp API returned an unreadable body (HTTP $code) for $method $endpoint.";
+			Logger::log( $error_message );
+			$this->last_error = new \WP_Error( 'sumup_unreadable_body', "SumUp answered HTTP $code with an unreadable body.", array( 'status' => (int) $code ) );
 
-		return null !== $decoded ? $decoded : false;
+			return false;
+		}
+
+		return $decoded;
 	}
 
 	/**

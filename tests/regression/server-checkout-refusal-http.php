@@ -48,6 +48,34 @@ $response = array( 'response' => array( 'code' => 503 ), 'body' => '{"message":"
 unanswered_expect( $provider->create_reader_action( server_row(), 'reader' ), 'sumup_checkout_unanswered', 'Service unavailable' );
 $response = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
 unanswered_expect( $provider->create_reader_action( server_row(), 'reader' ), 'sumup_checkout_unanswered', 'cURL error 28: timed out' );
+// A 2xx SumUp answered without naming the checkout took the POST: the checkout may be on the
+// reader, so the leg stays pending under the row-keyed reference, once sent and never again.
+$row_key = md5( 'row-' . strtolower( server_row()['id'] ) );
+$unnamed = array(
+	'{"data":{"client_tr"' => 'SumUp answered HTTP 201 with an unreadable body.',
+	'null' => 'SumUp answered HTTP 201 with an unreadable body.',
+	'false' => 'SumUp answered HTTP 201 with an unreadable body.',
+	'"ok"' => 'SumUp answered HTTP 201 with an unreadable body.',
+	'0' => 'SumUp answered HTTP 201 with an unreadable body.',
+	'{"data":{}}' => 'SumUp checkout did not return a client transaction ID.',
+	'[]' => 'SumUp checkout did not return a client transaction ID.',
+	'' => 'SumUp checkout did not return a client transaction ID.',
+);
+foreach ( $unnamed as $body => $message ) {
+	$response = array( 'response' => array( 'code' => 201 ), 'body' => (string) $body );
+	unset( $GLOBALS['options'][ 'sutwc_checkout_' . $row_key ] );
+	$sent = count( $requests );
+	unanswered_expect( $provider->create_reader_action( server_row(), 'reader' ), 'sumup_checkout_unanswered', $message );
+	expect( isset( $GLOBALS['options'][ 'sutwc_checkout_' . $row_key ] ), "a 201 with body '$body' times the checkout from its start" );
+	expect( $sent + 1 === count( $requests ), "a 201 with body '$body' sent exactly one checkout" );
+	if ( '{"data":{"client_tr"' === $body ) {
+		expect( 'sumup_unreadable_body' === $client->last_error()->get_error_code() && 201 === $client->last_error()->get_error_data()['status'], 'an unreadable 201 is recorded with its status' );
+	}
+}
+$unnamed_replay = server_row(); $unnamed_replay['events'] = array( array( 't' => gmdate( 'c' ), 'level' => 'warning', 'message' => 'Provider did not answer: sumup_checkout_unanswered' ) );
+$sent = count( $requests );
+expect( array( 'ref' => 'reader:row-' . strtolower( server_row()['id'] ), 'expires_at' => null ) === $provider->create_reader_action( $unnamed_replay, 'reader' ), 'the replay of an unnamed checkout hands back the row-keyed reference' );
+expect( $sent === count( $requests ), 'the replay of an unnamed checkout sends nothing' );
 // A busy reader on a first attempt is final: another sale holds the reader, nothing of ours is on it.
 $response = array( 'response' => array( 'code' => 409 ), 'body' => '{"message":"The reader is busy with another checkout."}' );
 refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 409, 'The reader is busy with another checkout.', 'sumup_http_409' );
@@ -89,6 +117,8 @@ $response = array( 'response' => array( 'code' => 422 ), 'body' => '{"message":"
 expect( 'requested' === $provider->cancel( 'reader:client:123' ) && isset( $GLOBALS['transients'][ 'sutwc_terminated_' . md5( 'client:123' ) ] ), 'a refused terminate means nothing to terminate: requested, and recorded for the poll' );
 $response = array( 'response' => array( 'code' => 503 ), 'body' => '{"message":"Service unavailable"}' );
 expect( is_wp_error( $provider->cancel( 'reader:client:123' ) ), 'an outage on terminate is an error the till retries' );
+$response = array( 'response' => array( 'code' => 200 ), 'body' => '{"data":' );
+expect( is_wp_error( $provider->cancel( 'reader:client:123' ) ), 'an unreadable 2xx on terminate is an error the till retries' );
 $response = array( 'response' => array( 'code' => 422 ), 'body' => '{"errors":{"total_amount":["this merchant can only accept \'EUR\'"]}}' );
 refusal_expect( $provider->create_reader_action( server_row(), 'reader' ), 422, "this merchant can only accept 'EUR'", 'sumup_http_422' );
 // A success after a refusal clears the record.
