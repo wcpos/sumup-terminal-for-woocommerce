@@ -22,10 +22,46 @@ foreach ( array( 200, 204 ) as $code ) {
 	}
 }
 expect( array() === $transactions->ids, 'device refunds do not use cloud lookup' );
-foreach ( array( new WP_Error( 'timeout', 'Timed out' ), new RuntimeException( 'Unavailable' ), array( 'response' => array( 'code' => 400 ), 'body' => '{"message":"Rejected"}' ) ) as $response ) {
-	expect( is_wp_error( $provider->refund( $row, 45, '2.30' ) ), 'refund failures never claim success' );
+// SumUp's refund has no idempotency key: only a 4xx proves it refused. Every other answer may
+// follow a refund SumUp made, so it is indeterminate and Free keeps the reservation.
+$unclear = array(
+	'timeout' => new WP_Error( 'timeout', 'Timed out' ),
+	'http_request_failed' => new WP_Error( 'http_request_failed', 'Connection reset' ),
+	'thrown' => new RuntimeException( 'Unavailable' ),
+	'thrown Error' => new Error( 'Unavailable' ),
+);
+foreach ( array( 500, 503, 201, 202, 302 ) as $code ) {
+	$unclear[ "HTTP $code" ] = array( 'response' => array( 'code' => $code ), 'body' => '{"message":"Something"}' );
 }
+foreach ( $unclear as $name => $response ) {
+	$requests = array();
+	$result = $provider->refund( $row, 45, '2.30' );
+	expect( is_wp_error( $result ) && 'sumup_refund_unanswered' === $result->get_error_code(), "$name: unanswered, not a refusal" );
+	$data = $result->get_error_data();
+	expect( true === ( $data['indeterminate'] ?? null ) && 502 === ( $data['status'] ?? null ), "$name: indeterminate, status 502" );
+	expect( RefundClient::UNANSWERED_MESSAGE === $result->get_error_message(), "$name: staff are told to check SumUp" );
+	expect( 1 === count( $requests ), "$name: exactly one POST" );
+}
+foreach ( array( 400, 404, 409, 422, 499 ) as $code ) {
+	$response = array( 'response' => array( 'code' => $code ), 'body' => '{"message":"Rejected ' . $code . '"}' );
+	$requests = array();
+	$result = $provider->refund( $row, 45, '2.30' );
+	expect( is_wp_error( $result ) && 'sumup_refund_rejected' === $result->get_error_code(), "HTTP $code: a refusal" );
+	$data = $result->get_error_data();
+	expect( ! array_key_exists( 'indeterminate', $data ) && $code === $data['status'], "HTTP $code: not indeterminate" );
+	expect( "Rejected $code" === $result->get_error_message(), "HTTP $code: SumUp's reason" );
+	expect( 1 === count( $requests ), "HTTP $code: exactly one POST" );
+}
+expect( ! RefundClient::refused( new WP_Error( 'timeout', 'Timed out', array( 'status' => 408 ) ) ) && ! RefundClient::refused( false ), 'only SumUp\'s own 4xx answer is a refusal' );
+$silent = new class( 'test' ) extends RefundClient {
+	public $calls = 0;
+	public function refund( string $transaction_id, ?float $amount ) { ++$this->calls; return false; }
+};
+$result = ( new SumUp_Device_Provider( $transactions, $silent, new ServerProfile() ) )->refund( $row, 45, '2.30' );
+expect( is_wp_error( $result ) && 'sumup_refund_unanswered' === $result->get_error_code() && true === $result->get_error_data()['indeterminate'] && 1 === $silent->calls, 'false from the refund client: indeterminate' );
 unset( $row['provider_refs']['transaction_id'] );
 $requests = array();
-expect( is_wp_error( $provider->refund( $row, 45, '12.30' ) ) && array() === $requests, 'missing UUID never falls back to code' );
+$result = $provider->refund( $row, 45, '12.30' );
+expect( is_wp_error( $result ) && 'transaction_not_found' === $result->get_error_code() && array() === $requests, 'missing UUID never falls back to code, and sends nothing' );
+expect( ! array_key_exists( 'indeterminate', (array) $result->get_error_data() ), 'missing UUID is a refusal: nothing was sent' );
 echo "server-device-refund ok\n";

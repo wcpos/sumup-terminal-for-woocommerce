@@ -265,7 +265,9 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 				// authenticated reader status: the reader reports itself IDLE with a last_activity
 				// after the checkout began (or after our terminate). Only an EMPTY lookup qualifies
 				// — any transaction, in any state, is the customer's and wins — and only after a
-				// grace period, so a tap that raced the end has time to become a transaction.
+				// grace period, from the checkout (or terminate) and from the reader's last activity,
+				// so a tap that raced the end, or a slow customer's late tap, has time to become a
+				// transaction.
 				if ( array() === $transaction && $this->reader_finished( $reader_id, $client_id ) ) {
 					$observation['status'] = 'cancelled';
 					// Nobody paid and nobody pressed cancel on the device (that leaves a FAILED
@@ -312,11 +314,14 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 	/**
 	 * Whether the reader has finished with this checkout without a transaction: the checkout (or
 	 * our terminate) is older than the grace period, and the authenticated reader status says the
-	 * device is IDLE with activity since then. A reader still showing the amount, a status call
-	 * that fails, or activity older than the checkout all mean "still waiting".
+	 * device is IDLE with activity since the checkout began, that activity itself older than the
+	 * grace. A reader still showing the amount, a status call that fails, activity older than the
+	 * checkout, or activity inside the grace all mean "still waiting".
 	 *
-	 * The grace covers a tap that raced the terminate: the reader goes IDLE having taken the money,
-	 * and SumUp lists the transaction a moment later. A SumUp delivery for this checkout saying it
+	 * The grace covers a tap that raced the end: the reader goes IDLE having taken the money, and
+	 * SumUp lists the transaction a moment later. That tap may come long after the checkout began
+	 * (a slow customer) and needs no terminate, so the grace runs from the reader's last activity
+	 * too, not only from the checkout or terminate. A SumUp delivery for this checkout saying it
 	 * ended without money (`failed`/`cancelled`), arriving after our terminate, closes that race —
 	 * a successful or unknown delivery never writes the marker — so the grace is skipped and only
 	 * the reader status decides. The delivery is unsigned, which is why it never decides the
@@ -350,7 +355,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 		}
 		$state    = $status['data']['state'] ?? $status['state'] ?? '';
 		$activity = strtotime( (string) ( $status['data']['last_activity'] ?? $status['last_activity'] ?? '' ) );
-		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= $since;
+		// The reader must also have been quiet for the grace: a customer who taps late leaves the
+		// reader IDLE with fresh activity a moment before SumUp lists the transaction.
+		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= $since
+			&& ( $reported || time() - $activity >= self::TERMINATE_GRACE_SECONDS );
 	}
 
 	/**
@@ -666,13 +674,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 						'provider_ref' => $transaction['id'],
 					);
 				}
-				$refused = is_wp_error( $result ) && 'sumup_refund_rejected' === $result->get_error_code();
-				$data    = $refused ? $result->get_error_data() : null;
-				$http    = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
-				if ( $http >= 400 && $http < 500 ) {
+				if ( Refund_Client::refused( $result ) ) {
 					return self::error( $result );
 				}
-				return $this->indeterminate( 'sumup_refund_unanswered', 'SumUp gave no clear answer to the refund, so it may have gone through. Check the transaction in SumUp before refunding again.' );
+				return $this->indeterminate( 'sumup_refund_unanswered', Refund_Client::UNANSWERED_MESSAGE );
 			}
 		);
 	}

@@ -12,6 +12,20 @@ class RefundClient extends HttpClient {
 	/** Match the existing HttpClient request timeout for SumUp cloud operations. */
 	private const REQUEST_TIMEOUT = 30;
 
+	/** What both providers say when a refund was sent and SumUp gave no clear answer. */
+	public const UNANSWERED_MESSAGE = 'SumUp gave no clear answer to the refund, so it may have gone through. Check the transaction in SumUp before refunding again.';
+
+	/**
+	 * Whether SumUp refused the refund: only a 4xx answer proves nothing was refunded.
+	 *
+	 * @param mixed $result What refund() returned.
+	 */
+	public static function refused( $result ): bool {
+		$data = is_wp_error( $result ) && 'sumup_refund_rejected' === $result->get_error_code() ? $result->get_error_data() : null;
+		$http = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+		return $http >= 400 && $http < 500;
+	}
+
 	/**
 	 * Submit a full (empty body) or partial refund without retrying.
 	 *

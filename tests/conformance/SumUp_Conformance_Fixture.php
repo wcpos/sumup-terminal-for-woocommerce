@@ -31,7 +31,7 @@ require_once __DIR__ . '/Recording_SumUp_Provider.php';
  *   confirmed through the authenticated transaction lookup; a failure is left to polling, which
  *   alone can tell a terminate from a decline (FAILED covers both).
  * - `expiry`: through the adapter's own reader-finished rule (an empty lookup after the terminate
- *   grace, with the reader idle since the checkout began); the fake ages the checkout marker.
+ *   grace, with the reader idle since the checkout began); the fake ages the checkout marker and the reader's activity.
  * The fixture configures affiliate keys, as a merchant can: the checkout then carries the row id as
  * SumUp's foreign_transaction_id, and a paid checkout SumUp did not answer for is found by it on the
  * held poll instead of waiting for its delivery. Without them the held leg's end rests on SumUp's
