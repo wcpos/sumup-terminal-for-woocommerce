@@ -199,9 +199,11 @@ final class Fake_SumUp_Transport {
 			$entry  = $this->checkouts[ $client ] ?? null;
 			if ( null === $entry || null === $entry['txn'] ) {
 				if ( null !== $entry && 'expired' === $entry['state'] ) {
-					// The checkout began longer ago than the adapter's terminate grace: the reader has
-					// shown nothing for a while. The marker is the adapter's own transient.
-					set_transient( 'sutwc_checkout_' . md5( $client ), microtime( true ) - 11, 15 * MINUTE_IN_SECONDS );
+					// The checkout began well before the reader gave up, and the reader has shown nothing
+					// for longer than the adapter's terminate grace since. The marker is the adapter's
+					// own transient.
+					set_transient( 'sutwc_checkout_' . md5( $client ), microtime( true ) - 22, 15 * MINUTE_IN_SECONDS );
+					$this->activity[ $entry['reader'] ] = microtime( true ) - 11;
 				}
 				return self::error( 404, 'No transaction for this client transaction id.' );
 			}

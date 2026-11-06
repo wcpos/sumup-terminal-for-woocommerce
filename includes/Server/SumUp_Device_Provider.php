@@ -185,10 +185,29 @@ class SumUp_Device_Provider extends \WCPOS\WooCommercePOSPro\Payments\Device\Abs
 					return new \WP_Error( 'transaction_not_found', 'No SumUp transaction UUID found for refund.', array( 'status' => 409 ) );
 				}
 				// Always send the requested amount: SDK tips can make the transaction total larger.
-				$result = $this->refunds->refund( $id, (float) $amount );
-				return false === $result || is_wp_error( $result ) ? $result : array(
-					'status' => 'succeeded',
-					'provider_ref' => $id,
+				// SumUp's refund has no idempotency key: only a 4xx proves it refused; any other answer
+				// may follow a refund SumUp made, so Free keeps the reservation (the server path's rule).
+				try {
+					$result = $this->refunds->refund( $id, (float) $amount );
+				} catch ( \Throwable $e ) {
+					$result = null;
+				}
+				if ( true === $result ) {
+					return array(
+						'status' => 'succeeded',
+						'provider_ref' => $id,
+					);
+				}
+				if ( Refund_Client::refused( $result ) ) {
+					return $result;
+				}
+				return new \WP_Error(
+					'sumup_refund_unanswered',
+					Refund_Client::UNANSWERED_MESSAGE,
+					array(
+						'indeterminate' => true,
+						'status' => 502,
+					)
 				);
 			}
 		);
