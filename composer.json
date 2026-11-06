@@ -14,6 +14,7 @@
         "friendsofphp/php-cs-fixer": "^3.0",
         "php-stubs/woocommerce-stubs": "^11.0",
         "phpcompatibility/phpcompatibility-wp": "^2.0",
+        "phpunit/phpunit": "^9.6",
         "sirbrillig/phpcs-variable-analysis": "^3.0",
         "squizlabs/php_codesniffer": "^3.0",
         "woocommerce/woocommerce-sniffs": "^2.0",
@@ -49,7 +50,8 @@
             "php tools/prefix-sumup-sdk-namespaces.php",
             "php tools/generate-prefixed-sumup-autoload.php",
             "composer dump-autoload -o"
-        ]
+        ],
+        "test": "for f in tests/regression/*.php; do php $f || exit 1; done"
     },
     "autoload": {
         "psr-4": {

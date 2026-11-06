@@ -1,0 +1,30 @@
+# Changelog
+
+## 2.0.0
+
+- A POS result delivery must carry the token its checkout's result URL was given, and its transaction must belong to that payment, before it can capture: a replayed or forged delivery naming another payment is acknowledged and ignored, and the poll settles the payment. Checkouts started on an earlier 2.0 beta have no token and settle by poll.
+- An old-panel success the webhook or the sweep could not complete is no longer lost from the completion queue when the two run at once; when the queue cannot be locked, the webhook answers 500 so SumUp delivers again, and the upgrade pass retries on the next request.
+- The sweep's expiry cancel of an attempt adopted on upgrade no longer terminates the reader once that attempt is past the two-minute window, so it cannot end another sale on the same Solo.
+- The Solo pairing help on the gateway page now names the right menu item, Connections → Cloud API (last in the list), and says to log out of the SumUp account on the reader if Cloud API is not shown.
+- A POS checkout SumUp accepted without naming it (an empty or unreadable answer) now keeps the leg pending instead of failing it, since the checkout may be on the reader; and a checkout is sent once, never again after a dropped connection or an outage.
+- A refund SumUp gave no clear answer to (a dropped connection, a timeout, an outage) is no longer reported as failed, since it may have gone through: the amount stays reserved and staff are asked to check it in SumUp, so the same refund cannot run twice. A refund SumUp refuses still frees the amount for another try.
+- A Bluetooth (POS app) refund SumUp gave no clear answer to now keeps the amount reserved too, instead of failing and freeing it for a second refund.
+- A Solo checkout the customer pays late is no longer reported cancelled the moment the reader goes idle: the reader must have been idle for the ten-second grace before an empty lookup counts as a timeout, so SumUp has time to list the payment.
+- New gateway setting, **Offline card payments** (off by default): with it on, a Bluetooth Solo or Solo Lite can take card payments while the POS is offline (needs the 2.0 POS app, which checks the reader model). SumUp must enable offline payments on the merchant account first; an offline payment can be declined when it uploads, and the merchant carries that risk.
+- A POS checkout SumUp did not answer (a dropped connection, a timeout, an outage) now keeps the leg pending instead of dropping it while the checkout may be on the reader. A retry of that leg sends nothing more to the reader: the first checkout settles the leg through its result URL if the customer pays it (or, with affiliate keys set, through SumUp's transaction list), and the leg ends only after the till's or the deadline's own cancel, so a payment SumUp has not listed yet is never written off.
+- A refund from the POS of an order paid on the previous order-pay panel finds the SumUp transaction by the order's transaction id.
+- A result delivery for an attempt the POS adopted on upgrade resolves to that attempt; a delivery for no POS payment is still acknowledged so SumUp stops retrying.
+- Pro's provider conformance suite runs in CI against the real adapter over a scripted SumUp; the transcripts in `tests/conformance/transcripts` are the certified record.
+- Requires WooCommerce POS Pro 2.0.0 or newer; the plugin registers nothing and shows an admin notice on older or missing Pro.
+- Web checkout removed: SumUp Terminal is no longer offered on the shop's checkout, and the "Enable SumUp Terminal for web checkout" setting is gone. The POS keypad and the POS order-pay page are the only surfaces.
+- The POS Legacy tab (order-pay page) runs through WooCommerce POS Pro's shared order-pay panel, so a Legacy-tab payment is a ledger row like a keypad payment; the plugin's own order-pay script and its payment AJAX endpoints are removed.
+- Attempts the previous panel left mid-flight are folded into Pro's ledger once on upgrade, 25 orders per request; the legacy webhook leaves an adopted attempt to Pro.
+- A cancel from the till is confirmed about three seconds after the tap instead of twelve: once SumUp's own delivery that the checkout ended without money has arrived after the terminate, the reader status is checked at once rather than after the ten-second grace.
+- A checkout the store terminated is confirmed cancelled on the next poll when SumUp has no transaction for it; a physical Solo never records one, so the till waited for the five-minute deadline.
+- New gateway setting, **POS connection**: **Bluetooth reader** (the POS app drives a Solo Lite, Solo or Air; needs the Affiliate Key) or **Solo over the cloud** (the store drives the reader).
+- New gateway settings **Default terminal**, **Enabled terminals** and **Lock terminal selection** choose which SumUp readers the POS offers at checkout.
+- POS connection defaults to the Solo over the cloud when nothing is saved; the Bluetooth default hid the SumUp tile on every web and desktop till.
+- A checkout SumUp refuses (for example a currency the merchant cannot take) reaches the till with SumUp's words and its HTTP status, so the POS stops instead of retrying.
+- A `FAILED` transaction is reported as `declined_or_cancelled`: SumUp cannot tell a declined card from a cancel on the reader, and the POS no longer calls a decline a cancel.
+- Add SumUp Solo server-mode checkout for the WooCommerce POS 2.0 keypad, including Virtual Solo testing, asynchronous cancellation, verified transaction results and full or partial provider refunds.
+- Add affiliate credentials and POS checkout diagnostics.
