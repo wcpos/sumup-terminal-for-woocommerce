@@ -9,7 +9,7 @@ expect( ! is_wp_error( $fetched ) && 'pending' === $fetched['status'], 'no trans
 $readers->cancels = array();
 expect( 'requested' === $provider->cancel( 'reader:client:123' ) && array( 'reader' ) === $readers->cancels, 'an untouched checkout can be terminated' );
 $request = new WP_REST_Request();
-$request->set_query_params( array( 'payment' => 'ABCDEF12-1234-1234-ABCD-123456789ABC' ) );
+$request->set_query_params( array( 'payment' => 'ABCDEF12-1234-1234-ABCD-123456789ABC', 'token' => substr( wp_hash( 'sutwc_webhook|ABCDEF12-1234-1234-ABCD-123456789ABC|' ), 0, 20 ) ) );
 $request->set_body( json_encode( array( 'id' => 'evt_1', 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'client:123', 'merchant_code' => 'M123', 'status' => 'failed' ) ) ) );
 $r = $provider->verify_webhook( $request );
 expect( ! is_wp_error( $r ) && array( 'event_id' => 'client:123:failed:none' ) === $r['patch'], 'a failed delivery for an untouched checkout is event-only, keyed on the observation' );

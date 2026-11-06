@@ -238,8 +238,9 @@ class AjaxHandler {
 		// the order lock on a fresh read so two deliveries cannot complete it twice. When SumUp
 		// could not be asked, or the lock was held, the pass asks again on a later request.
 		$completed = Legacy_Adoption::complete_recorded( (int) $order->get_id(), $this );
-		if ( is_wp_error( $completed ) ) {
-			Legacy_Adoption::queue_recorded( (int) $order->get_id(), Legacy_Adoption::LOOKUP_BACKOFF[0] );
+		if ( is_wp_error( $completed ) && ! Legacy_Adoption::queue_recorded( (int) $order->get_id(), Legacy_Adoption::LOOKUP_BACKOFF[0] ) ) {
+			// Neither completed nor queued: a 500 makes SumUp deliver again.
+			throw new Exception( 'SumUp Webhook: order ' . $order->get_id() . ' could not be queued for completion.' );
 		}
 	}
 
