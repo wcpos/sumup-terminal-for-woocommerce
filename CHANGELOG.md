@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.0.0
 
+- The Solo pairing help on the gateway page now names the right menu item, Connections → Cloud API (last in the list), and says to log out of the SumUp account on the reader if Cloud API is not shown.
 - New gateway setting, **Offline card payments** (off by default): with it on, a Bluetooth Solo or Solo Lite can take card payments while the POS is offline (needs the 2.0 POS app, which checks the reader model). SumUp must enable offline payments on the merchant account first; an offline payment can be declined when it uploads, and the merchant carries that risk.
 - A POS checkout SumUp did not answer (a dropped connection, a timeout, an outage) now keeps the leg pending instead of dropping it while the checkout may be on the reader. A retry of that leg sends nothing more to the reader: the first checkout settles the leg through its result URL if the customer pays it (or, with affiliate keys set, through SumUp's transaction list), and the leg ends only after the till's or the deadline's own cancel, so a payment SumUp has not listed yet is never written off.
 - A refund from the POS of an order paid on the previous order-pay panel finds the SumUp transaction by the order's transaction id.
@@ -13,6 +14,8 @@
 - Attempts the previous panel left mid-flight are folded into Pro's ledger once on upgrade, 25 orders per request; the legacy webhook leaves an adopted attempt to Pro.
 - A cancel from the till is confirmed about three seconds after the tap instead of twelve: once SumUp's own delivery that the checkout ended without money has arrived after the terminate, the reader status is checked at once rather than after the ten-second grace.
 - A checkout the store terminated is confirmed cancelled on the next poll when SumUp has no transaction for it; a physical Solo never records one, so the till waited for the five-minute deadline.
+- New gateway setting, **POS connection**: **Bluetooth reader** (the POS app drives a Solo Lite, Solo or Air; needs the Affiliate Key) or **Solo over the cloud** (the store drives the reader).
+- New gateway settings **Default terminal**, **Enabled terminals** and **Lock terminal selection** choose which SumUp readers the POS offers at checkout.
 - POS connection defaults to the Solo over the cloud when nothing is saved; the Bluetooth default hid the SumUp tile on every web and desktop till.
 - A checkout SumUp refuses (for example a currency the merchant cannot take) reaches the till with SumUp's words and its HTTP status, so the POS stops instead of retrying.
 - A `FAILED` transaction is reported as `declined_or_cancelled`: SumUp cannot tell a declined card from a cancel on the reader, and the POS no longer calls a decline a cancel.
