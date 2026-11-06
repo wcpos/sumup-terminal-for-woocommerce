@@ -48,6 +48,9 @@ namespace {
 	if ( ! function_exists( 'delete_option' ) ) { function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; } }
 	if ( ! function_exists( 'wc_get_order' ) ) { function wc_get_order( $id ) { return $GLOBALS['orders'][ $id ] ?? false; } }
 	if ( ! function_exists( '__' ) ) { function __( $text, $domain = null ) { return $text; } }
+	if ( ! function_exists( 'wp_hash' ) ) { function wp_hash( $data ) { return hash_hmac( 'md5', $data, 'test-salt' ); } }
+	// A caching get_option (legacy-adoption.php) keeps its request cache here.
+	if ( ! function_exists( 'wp_cache_delete' ) ) { function wp_cache_delete( $key, $group = '' ) { unset( $GLOBALS['wp_cache'][ $group ][ $key ] ); return true; } }
 }
 namespace WCPOS\WooCommercePOSPro\Payments\Server {
 	if ( ! interface_exists( __NAMESPACE__ . '\\Provider_Adapter_Interface' ) ) {

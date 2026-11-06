@@ -10,9 +10,11 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal {
 	class AjaxHandler {
 		public static $completed = array();
 		public static $answers   = array(); // order id => true | false | 'silent'
+		public static $during    = null; // another request's work while this one asks SumUp
 		public function __construct() {}
 		public function complete_recorded_attempt( $order ) {
 			self::$completed[] = $order->get_id();
+			if ( self::$during ) { ( self::$during )(); }
 			$answer = self::$answers[ $order->get_id() ] ?? true;
 			return 'silent' === $answer ? new \WP_Error( 'sutwc_lookup_unavailable', 'no answer' ) : $answer;
 		}
@@ -55,9 +57,14 @@ require_once __DIR__ . '/../../includes/Legacy_Adoption.php';
 use WCPOS\WooCommercePOS\SumUpTerminal\Legacy_Adoption;
 
 if ( ! function_exists( 'wc_get_logger' ) ) { function wc_get_logger() { return new class() { public function error( $m, $c = array() ) {} public function info( $m, $c = array() ) {} public function debug( $m, $c = array() ) {} }; } }
-if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; } }
-function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; }
-function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; }
+// Like WordPress, a request keeps the first read of an option: another request's write to
+// $GLOBALS['options'] is not seen until wp_cache_delete() drops the cached value.
+function get_option( $key, $default = false ) {
+	if ( ! array_key_exists( $key, $GLOBALS['wp_cache']['options'] ?? array() ) ) { $GLOBALS['wp_cache']['options'][ $key ] = $GLOBALS['options'][ $key ] ?? null; }
+	return $GLOBALS['wp_cache']['options'][ $key ] ?? $default;
+}
+function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; $GLOBALS['wp_cache']['options'][ $key ] = $value; return true; }
+function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); $GLOBALS['wp_cache']['options'][ $key ] = null; return true; }
 function wc_get_orders( $args ) { $GLOBALS['queries'][] = $args; return 'PENDING' === ( $args['meta_value'] ?? '' ) ? $GLOBALS['page'] : ( $GLOBALS['recorded'][ $args['meta_value'] ] ?? array() ); }
 function wc_get_order( $id ) { return $GLOBALS['fresh'][ $id ] ?? ( $GLOBALS['by_id'][ $id ] ?? false ); }
 function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
@@ -83,6 +90,7 @@ class WC_Order {
 
 function reset_state( array $page, int $newest, array $fresh = array() ) {
 	$GLOBALS['options'] = array();
+	$GLOBALS['wp_cache'] = array();
 	$GLOBALS['page']    = $page;
 	$GLOBALS['newest']  = $newest;
 	$GLOBALS['by_id']   = array();
@@ -95,6 +103,7 @@ function reset_state( array $page, int $newest, array $fresh = array() ) {
 	$GLOBALS['now']         = 1000000;
 	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed = array();
 	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$answers   = array();
+	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$during    = null;
 	\WCPOS\WooCommercePOS\SumUpTerminal\Server\SumUp_Server_Provider::$marked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked = array();
 	\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
@@ -149,7 +158,7 @@ $queued = array_keys( $GLOBALS['options']['sutwc_completion_queue'] ); sort( $qu
 expect( array( 30, 31, 32 ) === $queued && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'], 'recorded successes are queued and the adoption pass is over' );
 Legacy_Adoption::complete_recorded_page();
 $completed = \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed; sort( $completed );
-$locked    = \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked; sort( $locked );
+$locked    = array_values( array_diff( \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked, array( Legacy_Adoption::QUEUE_LOCK_ID ) ) ); sort( $locked );
 expect( array( 30, 31 ) === $completed, 'the sweep completes the recorded successes, the adopted one is not touched' );
 expect( array( 30, 31, 32 ) === $locked, 'each completion runs under the order lock' );
 expect( ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'the queue is cleared once empty' );
@@ -193,6 +202,7 @@ Legacy_Adoption::queue_recorded( 50, Legacy_Adoption::LOOKUP_BACKOFF[0] );
 Legacy_Adoption::queue_recorded( 50 );
 expect( array( 50 => array( 'tries' => 0, 'next_at' => 1000000 + Legacy_Adoption::LOOKUP_BACKOFF[0] ) ) === $GLOBALS['options']['sutwc_completion_queue'], 'queueing is idempotent and keeps the first delay' );
 $GLOBALS['options']['sutwc_completion_queue'][51] = array( 'tries' => 0, 'next_at' => 1000000 ); // another request queued this meanwhile
+$GLOBALS['wp_cache'] = array(); // and the sweep is a new request
 $GLOBALS['by_id'][51] = new WC_Order( 51, '', 'ctx_other', 'PAID' );
 Legacy_Adoption::complete_recorded_page();
 expect( array( 51 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && array( 50 ) === array_keys( $GLOBALS['options']['sutwc_completion_queue'] ), 'a due entry is completed, one not yet due is kept' );
@@ -212,11 +222,49 @@ $GLOBALS['by_id'] = array( 90 => new WC_Order( 90, '', 'ctx_behind', 'PAID' ) );
 Legacy_Adoption::complete_recorded_page();
 expect( array( 90 ) === \WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'][90] ) && Legacy_Adoption::PAGE_SIZE === count( $GLOBALS['options']['sutwc_completion_queue'] ), 'a due entry behind a full page of waiting ones is completed; the waiting ones are kept' );
 
+// 1g. The queue is rewritten under its own lock from a read past the request's cache: an entry
+//     another request queued while the sweep asked SumUp survives, whether or not the sweep
+//     empties its own snapshot. A refused lock writes nothing and loses nothing.
+foreach ( array( array(), array( 72 ) ) as $waiting ) {
+	reset_state( array(), 0 );
+	$GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
+	$GLOBALS['options']['sutwc_completion_queue'] = array( 70 => array( 'tries' => 0, 'next_at' => 1000000 ) );
+	foreach ( $waiting as $id ) { $GLOBALS['options']['sutwc_completion_queue'][ $id ] = array( 'tries' => 0, 'next_at' => 2000000 ); }
+	$GLOBALS['by_id'] = array( 70 => new WC_Order( 70, '', 'ctx_sweep', 'PAID' ) );
+	\WCPOS\WooCommercePOS\SumUpTerminal\AjaxHandler::$during = static function () { $GLOBALS['options']['sutwc_completion_queue'][71] = array( 'tries' => 0, 'next_at' => 1000000 ); };
+	Legacy_Adoption::complete_recorded_page();
+	$kept = array_keys( $GLOBALS['options']['sutwc_completion_queue'] ?? array() ); sort( $kept );
+	expect( array_merge( array( 71 ), $waiting ) === $kept, 'an entry queued while the sweep asked SumUp survives the sweep\'s rewrite' );
+	expect( in_array( Legacy_Adoption::QUEUE_LOCK_ID, \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$locked, true ), 'the queue is rewritten under its lock' );
+}
+reset_state( array(), 0 );
+$GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
+$GLOBALS['options']['sutwc_completion_queue'] = array( 75 => array( 'tries' => 0, 'next_at' => 1000000 ) );
+$GLOBALS['by_id'] = array( 75 => new WC_Order( 75, '', 'ctx_refused', 'PAID' ) );
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( Legacy_Adoption::QUEUE_LOCK_ID );
+Legacy_Adoption::complete_recorded_page();
+expect( false === Legacy_Adoption::queue_recorded( 76 ), 'a refused queue lock is reported' );
+expect( array( 75 => array( 'tries' => 0, 'next_at' => 1000000 ) ) === $GLOBALS['options']['sutwc_completion_queue'], 'a refused queue lock leaves the queue as it was: nothing lost, nothing queued' );
+// A refused queue lock during the pass writes neither the version nor the snapshot; the next
+// request takes the pass again and queues the success.
+reset_state( array( new WC_Order( 77, 'rdr_a', 'ctx_flight' ) ), 77 );
+$GLOBALS['recorded'] = array( 'PAID' => array( new WC_Order( 78, '', 'ctx_rec', 'PAID' ) ) );
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( Legacy_Adoption::QUEUE_LOCK_ID );
+Legacy_Adoption::upgrade();
+expect( ! isset( $GLOBALS['options']['sutwc_adoption_version'] ) && ! isset( $GLOBALS['options']['sutwc_adoption_queue'] ) && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ) && array() === $GLOBALS['adopted'], 'a refused queue lock during the pass writes neither the version nor the snapshot' );
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
+Legacy_Adoption::upgrade();
+expect( array( 78 ) === array_keys( $GLOBALS['options']['sutwc_completion_queue'] ) && Legacy_Adoption::VERSION === $GLOBALS['options']['sutwc_adoption_version'] && 1 === count( $GLOBALS['adopted'] ), 'with the lock free the next request queues the success and finishes the pass' );
+
 // 5. Once the version is recorded, nothing runs.
 reset_state( array( new WC_Order( 14, 'rdr_a', 'ctx_late' ) ), 14 );
 $GLOBALS['options']['sutwc_adoption_version'] = Legacy_Adoption::VERSION;
 Legacy_Adoption::upgrade();
 expect( array() === $GLOBALS['adopted'], 'a finished pass does not run again' );
+
+// The queue's lock id is one no order reaches: not negative (absint() would make it an order's lock)
+// and not 0 (Free's parking lock).
+expect( PHP_INT_MAX === Legacy_Adoption::QUEUE_LOCK_ID, 'the queue lock id is PHP_INT_MAX: positive, not 0, no order\'s' );
 
 echo "PASS: legacy adoption takes only attempts in flight, once, under the lock.\n";
 }

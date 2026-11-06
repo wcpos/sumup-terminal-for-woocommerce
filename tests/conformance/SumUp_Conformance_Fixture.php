@@ -146,7 +146,7 @@ final class SumUp_Conformance_Fixture implements Conformance_Fixture {
 		parse_str( (string) wp_parse_url( $this->transport->return_url( $client ), PHP_URL_QUERY ), $query );
 		$body    = array( 'id' => 'evt_' . $client . '_' . $event, 'event_type' => 'solo.transaction.updated', 'timestamp' => gmdate( 'c' ), 'payload' => array( 'client_transaction_id' => $client, 'merchant_code' => $tampered ? 'MOTHER' : Fake_SumUp_Transport::MERCHANT, 'status' => $states[ $event ][0], 'transaction_id' => $txn['id'] ?? null ) );
 		$request = new \WP_REST_Request( 'POST', Payments_Webhook_Controller::ROUTE );
-		$request->set_query_params( array_intersect_key( $query, array_flip( array( 'provider', 'payment', 'reader' ) ) ) );
+		$request->set_query_params( array_intersect_key( $query, array_flip( array( 'provider', 'payment', 'reader', 'token' ) ) ) );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( wp_json_encode( $body ) );
 		return $request;

@@ -39,6 +39,12 @@ final class Legacy_Adoption {
 	public const META_STARTED = '_sumup_attempt_started';
 	/** The action reference Pro adopted, kept on the order after Free rewrites the transaction id. */
 	public const META_ADOPTED = '_sutwc_adopted_ref';
+	/**
+	 * Free's order lock id that guards the completion queue. No order reaches it, and it is
+	 * neither negative (Order_Lock passes ids through absint(), so -5 would be order 5's lock)
+	 * nor 0 (Free's parking lock).
+	 */
+	public const QUEUE_LOCK_ID = PHP_INT_MAX;
 
 	/**
 	 * The action reference Pro's provider uses for an attempt the old panel started:
@@ -103,10 +109,14 @@ final class Legacy_Adoption {
 					$queue[ $order->get_id() ] = $ref;
 				}
 			}
-			update_option( 'sutwc_adoption_queue', $queue, false );
+			// Queued before the snapshot is written: if the queue lock is refused, neither is written
+			// and the next request takes the snapshot again (queueing is idempotent).
 			foreach ( self::recorded_successes() as $order_id ) {
-				self::queue_recorded( $order_id );
+				if ( ! self::queue_recorded( $order_id ) ) {
+					return;
+				}
 			}
+			update_option( 'sutwc_adoption_queue', $queue, false );
 		}
 		$page = array_slice( $queue, 0, self::PAGE_SIZE, true );
 		foreach ( $page as $order_id => $ref ) {
@@ -154,9 +164,10 @@ final class Legacy_Adoption {
 	 *
 	 * @param int $order_id Order id.
 	 * @param int $delay    Seconds before the first ask; 0 for the next sweep.
+	 * @return bool False when the queue lock was refused and nothing was queued.
 	 */
-	public static function queue_recorded( int $order_id, int $delay = 0 ): void {
-		self::update_queue(
+	public static function queue_recorded( int $order_id, int $delay = 0 ): bool {
+		return self::update_queue(
 			static function ( array $queue ) use ( $order_id, $delay ) {
 				if ( ! isset( $queue[ $order_id ] ) ) {
 					$queue[ $order_id ] = array(
@@ -170,19 +181,33 @@ final class Legacy_Adoption {
 	}
 
 	/**
-	 * Rewrite the completion queue from a fresh read, so two requests (a sweep and a webhook, or
-	 * two webhooks) cannot overwrite each other's entries.
+	 * Rewrite the completion queue under the queue lock, from a read past the request's option
+	 * cache (which still holds what this request read first, possibly before a whole sweep), so
+	 * two requests (a sweep and a webhook, or two webhooks) cannot overwrite each other's entries.
 	 *
 	 * @param callable $change Receives the current queue, returns the new one.
+	 * @return bool False when the lock was refused; nothing was written.
 	 */
-	private static function update_queue( callable $change ): void {
-		$queue = get_option( 'sutwc_completion_queue', array() );
-		$queue = $change( is_array( $queue ) ? $queue : array() );
-		if ( array() === $queue ) {
-			delete_option( 'sutwc_completion_queue' );
-			return;
+	private static function update_queue( callable $change ): bool {
+		$result = self::with_order_lock(
+			self::QUEUE_LOCK_ID,
+			static function () use ( $change ) {
+				wp_cache_delete( 'sutwc_completion_queue', 'options' );
+				$queue = get_option( 'sutwc_completion_queue', array() );
+				$queue = $change( is_array( $queue ) ? $queue : array() );
+				if ( array() === $queue ) {
+					delete_option( 'sutwc_completion_queue' );
+				} else {
+					update_option( 'sutwc_completion_queue', $queue, false );
+				}
+				return true;
+			}
+		);
+		if ( true !== $result ) {
+			Logger::log( 'Legacy SumUp completion queue not written: ' . ( is_wp_error( $result ) ? $result->get_error_code() : 'unknown' ) );
+			return false;
 		}
-		update_option( 'sutwc_completion_queue', $queue, false );
+		return true;
 	}
 
 	/**
@@ -259,6 +284,7 @@ final class Legacy_Adoption {
 			}
 			$changes[ $order_id ] = null;
 		}
+		// A refused lock leaves the queue as it was: the next sweep asks again.
 		self::update_queue(
 			static function ( array $queue ) use ( $changes ) {
 				foreach ( $changes as $order_id => $entry ) {
