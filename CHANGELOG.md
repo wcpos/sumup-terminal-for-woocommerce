@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A POS result delivery must carry the token its checkout's result URL was given, and its transaction must belong to that payment, before it can capture: a replayed or forged delivery naming another payment is acknowledged and ignored, and the poll settles the payment. Checkouts started on an earlier 2.0 beta have no token and settle by poll.
+- An old-panel success the webhook or the sweep could not complete is no longer lost from the completion queue when the two run at once; when the queue cannot be locked, the webhook answers 500 so SumUp delivers again, and the upgrade pass retries on the next request.
+- The sweep's expiry cancel of an attempt adopted on upgrade no longer terminates the reader once that attempt is past the two-minute window, so it cannot end another sale on the same Solo.
+
 - New gateway setting, **Offline card payments** (off by default): with it on, a Bluetooth Solo or Solo Lite can take card payments while the POS is offline (needs the 2.0 POS app, which checks the reader model). SumUp must enable offline payments on the merchant account first; an offline payment can be declined when it uploads, and the merchant carries that risk.
 - A POS checkout SumUp did not answer (a dropped connection, a timeout, an outage) now keeps the leg pending instead of dropping it while the checkout may be on the reader. A retry of that leg sends nothing more to the reader: the first checkout settles the leg through its result URL if the customer pays it (or, with affiliate keys set, through SumUp's transaction list), and the leg ends only after the till's or the deadline's own cancel, so a payment SumUp has not listed yet is never written off.
 - A refund from the POS of an order paid on the previous order-pay panel finds the SumUp transaction by the order's transaction id.

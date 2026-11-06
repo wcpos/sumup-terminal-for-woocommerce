@@ -3,6 +3,7 @@
 require_once __DIR__ . '/stubs/wcpos-pro-server.php';
 require_once __DIR__ . '/stubs/sumup-server.php';
 list( $provider, $profile, $readers, $transactions ) = server_fixture();
+function wcpos_pro_payment_id_for_action( $provider, $ref ) { return $GLOBALS['adopted_map'][ $ref ] ?? null; }
 foreach ( array( 'SUCCESSFUL' => 'requested', 'FAILED' => 'final', 'CANCELLED' => 'final' ) as $status => $expected ) {
 	$transactions->result = server_transaction( $status );
 	expect( $expected === $provider->cancel( 'reader:client:123' ), $status );
@@ -97,4 +98,34 @@ $readers->cancel_result = true; $GLOBALS['transient_write_fails'] = true; $reade
 expect( 'requested' === $provider->cancel( 'reader:client:123' ), 'terminate still accepted when the marker cannot be written' );
 expect( array() === $GLOBALS['transients'] && 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'nothing remembered: the poll waits for the deadline' );
 unset( $GLOBALS['transient_write_fails'] );
+// The sweep voids an attempt adopted from the old panel long after it left the reader: past the
+// unanswered grace, the cancel is recorded without a terminate (which would reach another sale),
+// in durable markers that alone confirm it once the reader is idle; a young one still terminates.
+$GLOBALS['options'] = array(); $GLOBALS['transients'] = array(); $readers->cancels = array(); $readers->status_calls = array();
+$GLOBALS['adopted_map'] = array( 'reader:ctx_adopted' => 'row-a', 'reader:ctx_young' => 'row-b' );
+$transactions->result = array();
+SumUp_Server_Provider::mark_adopted_checkout( 'ctx_adopted', time() - 600 );
+expect( 'requested' === $provider->cancel( 'reader:ctx_adopted' ) && array() === $readers->cancels, 'an adopted attempt ten minutes old is not terminated' );
+$terminated = 'sutwc_terminated_' . md5( 'ctx_adopted' );
+expect( isset( $GLOBALS['options'][ 'sutwc_checkout_' . md5( 'ctx_adopted' ) ], $GLOBALS['options'][ $terminated ] ), 'its markers are durable' );
+$GLOBALS['transients'] = array();
+$GLOBALS['options'][ $terminated ] = (string) ( time() - $grace );
+$readers->status_result = $idle( 300 );
+expect( 'cancelled' === $provider->fetch( 'reader:ctx_adopted' )['status'], 'the unsent cancel is confirmed from the durable markers once the reader is idle since the start' );
+SumUp_Server_Provider::mark_adopted_checkout( 'ctx_young', time() - 30 );
+expect( 'requested' === $provider->cancel( 'reader:ctx_young' ) && array( 'reader' ) === $readers->cancels, 'a cashier\'s cancel of a young adopted attempt still reaches the reader' );
+$readers->cancels = array();
+$GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'client:456' ) ] = time() - 600;
+expect( 'requested' === $provider->cancel( 'reader:client:456' ) && array( 'reader' ) === $readers->cancels, 'an ordinary keypad checkout is terminated whatever its age' );
+// Affiliate keys and a paid foreign listing change nothing for an adopted attempt: only a row whose
+// create SumUp did not answer is looked up by foreign id.
+$GLOBALS['options'] = array( 'woocommerce_sumup_terminal_for_woocommerce_settings' => array( 'api_key' => 'test', 'affiliate_app_id' => 'app', 'affiliate_key' => 'key' ) );
+$GLOBALS['transients'] = array(); $readers->cancels = array(); $transactions->ids = array();
+$transactions->result = array(); $transactions->foreign = array( 'items' => array( server_transaction() ) );
+SumUp_Server_Provider::mark_adopted_checkout( 'ctx_adopted', time() - 600 );
+SumUp_Server_Provider::mark_adopted_checkout( 'ctx_young', time() - 30 );
+expect( 'requested' === $provider->cancel( 'reader:ctx_adopted' ) && array() === $readers->cancels && isset( $GLOBALS['options'][ $terminated ] ), 'with keys, an old adopted attempt is still recorded cancelled without a terminate' );
+expect( 'requested' === $provider->cancel( 'reader:ctx_young' ) && array( 'reader' ) === $readers->cancels, 'with keys, a young adopted attempt is still terminated' );
+expect( array( 'ctx_adopted', 'ctx_young' ) === $transactions->ids, 'an adopted attempt\'s cancel asks SumUp by client id only, never by foreign id' );
+$transactions->foreign = 'same';
 echo "server-cancel ok\n";

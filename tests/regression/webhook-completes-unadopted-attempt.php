@@ -94,6 +94,13 @@ foreach ( array( array( 'client_transaction_id' => 'ctx_1', 'status' => 'PENDING
 	expect( array() === $order->completed && 0 === $GLOBALS['options']['sutwc_completion_queue'][42]['tries'] && $GLOBALS['options']['sutwc_completion_queue'][42]['next_at'] >= time() + 60, 'no answer completes nothing and queues the order for the sweep, after the first backoff' );
 }
 $GLOBALS['options'] = array();
+// SumUp could not be asked and the queue lock is held: neither completed nor queued, so the
+// delivery throws and the endpoint answers 500 for SumUp to deliver again.
+$handler->lookup = null; $order = new WC_Order(); $GLOBALS['fresh'] = $order; $thrown = false;
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array( WCPOS\WooCommercePOS\SumUpTerminal\Legacy_Adoption::QUEUE_LOCK_ID );
+try { $method->invoke( $handler, $order, array( 'event_type' => 'solo.transaction.updated', 'payload' => array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' ), 'timestamp' => '2026-10-08T22:00:00+00:00' ) ); } catch ( Exception $e ) { $thrown = true; }
+\WCPOS\WooCommercePOS\Payments\Contract\Order_Lock::$refuse = array();
+expect( $thrown && array() === $order->completed && ! isset( $GLOBALS['options']['sutwc_completion_queue'] ), 'a queue lock refused after a silent lookup throws, so SumUp delivers again' );
 
 // A failed delivery: nothing is completed, whatever the lookup says.
 $handler->lookup = array( 'client_transaction_id' => 'ctx_1', 'status' => 'SUCCESSFUL' );
