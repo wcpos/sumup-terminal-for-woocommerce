@@ -68,8 +68,9 @@ $readers->status_result = $idle( $grace + 60 );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'idle but inactive since before the terminate: waiting' );
 $readers->status_result = false;
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'status call failed: waiting' );
-$readers->status_result = $idle( 0 );
-expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'idle since the terminate, no transaction: cancelled' );
+$GLOBALS['transients'][ $key ] = time() - 2 * $grace;
+$readers->status_result = $idle( $grace );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'idle since the terminate, quiet for the grace, no transaction: cancelled' );
 // A terminate of a checkout the reader had already dropped: no new activity after the terminate,
 // but activity after the checkout began, which is what counts.
 $GLOBALS['transients'][ 'sutwc_checkout_' . md5( 'client:123' ) ] = time() - 400;
@@ -90,6 +91,24 @@ $walked = $provider->fetch( 'reader:client:123' );
 expect( 'cancelled' === $walked['status'] && 'expired' === $walked['failure_reason'], 'reader idle after the checkout began: cancelled without a terminate, as a timeout' );
 $readers->status_result = $idle( 120 );
 expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'idle since before the checkout: the push may not have arrived yet' );
+// The finding (sumup#69): a slow customer pays more than the grace after the checkout began. The
+// reader goes IDLE with fresh activity before SumUp lists the transaction; calling that a timeout
+// fails the row, and the late SUCCESSFUL is then ignored. The grace also runs from that activity.
+$GLOBALS['transients'] = array( 'sutwc_checkout_' . md5( 'client:123' ) => time() - 60 );
+$readers->status_calls = array(); $readers->status_result = $idle( 0 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'] && array( 'reader' ) === $readers->status_calls, 'a late tap: reader idle just now, checkout older than the grace, no terminate: waiting, reader asked' );
+$readers->status_result = $idle( $grace );
+$late = $provider->fetch( 'reader:client:123' );
+expect( 'cancelled' === $late['status'] && 'expired' === $late['failure_reason'], 'the same reader quiet for exactly the grace: cancelled as a timeout' );
+$readers->status_result = $idle( $grace - 1 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'a walk-away one second inside the activity grace: waiting' );
+$readers->status_result = $idle( 61 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'activity older than the checkout: waiting' );
+$GLOBALS['transients'] = array( $key => time() - 60 );
+$readers->status_result = $idle( $grace - 1 );
+expect( 'pending' === $provider->fetch( 'reader:client:123' )['status'], 'our terminate, no delivery, activity one second inside the grace: waiting' );
+$readers->status_result = $idle( $grace );
+expect( 'cancelled' === $provider->fetch( 'reader:client:123' )['status'], 'our terminate, no delivery, activity at the grace: cancelled' );
 $GLOBALS['transients'] = array();
 $readers->cancel_result = false;
 provider_error_expect( $provider->cancel( 'reader:client:123' ) );
