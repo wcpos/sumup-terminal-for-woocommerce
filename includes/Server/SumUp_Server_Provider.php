@@ -223,7 +223,10 @@ class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abs
 					return self::error( $result );
 				}
 				if ( empty( $result['data']['client_transaction_id'] ) ) {
-					return self::error( 'SumUp checkout did not return a client transaction ID.' );
+					// SumUp took the POST (a 2xx) without naming the checkout, so it may be on the reader:
+					// pending under the row-keyed reference, polled and cancelled like an unanswered create.
+					self::remember( 'checkout', self::unanswered_id( (string) $row['id'] ) );
+					return $this->indeterminate( 'sumup_checkout_unanswered', 'SumUp checkout did not return a client transaction ID.' );
 				}
 				// When the reader later reports itself idle, fetch() needs to know the checkout
 				// predates that idleness (see fetch()).
