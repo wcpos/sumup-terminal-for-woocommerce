@@ -41,6 +41,11 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		return ! empty( $this->api_key );
 	}
 
+	/** The SDK's failure is logged and the same request is retried over HTTP, so that answer is the one to report. */
+	public function last_error() {
+		return $this->fallback->last_error();
+	}
+
 	public function get_all() {
 		$merchant_id = $this->ensure_merchant_id();
 		if ( ! $merchant_id ) {
@@ -114,21 +119,28 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		);
 	}
 
+	/**
+	 * A checkout never goes through the SDK.
+	 *
+	 * SumUp's checkout has no idempotency key, and sdk_call() answers any throwable (a dropped
+	 * connection after the POST left, a 5xx) by sending the request again over HTTP: a second
+	 * checkout behind one that may already be on the reader, and a busy refusal of the second
+	 * would then report the sale failed. One POST, over HTTP, whatever comes back.
+	 *
+	 * @param string $reader_id     Reader ID.
+	 * @param array  $checkout_data Checkout data.
+	 *
+	 * @return array|false Checkout response or false on failure.
+	 */
 	public function checkout( $reader_id, $checkout_data ) {
-		$merchant_id = $this->ensure_merchant_id();
-		if ( ! $merchant_id ) {
+		// last_error() reports the fallback's answer; a false returned before any request is
+		// made must not leave an earlier request's refusal there for the provider to read.
+		$this->fallback->forget_error();
+		if ( ! $this->ensure_merchant_id() ) {
 			return false;
 		}
 
-		return $this->sdk_call(
-			'create reader checkout',
-			function () use ( $merchant_id, $reader_id, $checkout_data ) {
-				return $this->normalize_checkout_response( $this->get_readers_service()->createCheckout( $merchant_id, $reader_id, $checkout_data ) );
-			},
-			function () use ( $reader_id, $checkout_data ) {
-				return $this->fallback->checkout( $reader_id, $checkout_data );
-			}
-		);
+		return $this->fallback->checkout( $reader_id, $checkout_data );
 	}
 
 	public function cancel_checkout( $reader_id ) {
@@ -230,10 +242,6 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		);
 	}
 
-	private function normalize_checkout_response( $response ) {
-		return $this->snake_case_array_keys( json_decode( wp_json_encode( $response ), true ) );
-	}
-
 	private function enum_value( $value ) {
 		if ( is_object( $value ) && $value instanceof \BackedEnum ) {
 			return $value->value;
@@ -244,24 +252,6 @@ class SdkReaderApiClient implements ReaderApiClientInterface {
 		}
 
 		return $value;
-	}
-
-	private function snake_case_array_keys( $value ) {
-		if ( ! is_array( $value ) ) {
-			return $value;
-		}
-
-		$normalized = array();
-
-		foreach ( $value as $key => $item ) {
-			if ( is_string( $key ) ) {
-				$key = strtolower( preg_replace( '/(?<!^)[A-Z]/', '_$0', $key ) );
-			}
-
-			$normalized[ $key ] = $this->snake_case_array_keys( $item );
-		}
-
-		return $normalized;
 	}
 
 	private function sdk_call( $operation, callable $callback, callable $fallback ) {

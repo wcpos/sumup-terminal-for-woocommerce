@@ -1,0 +1,913 @@
+<?php
+/**
+ * SumUp cloud transport for Pro; Free owns settlement and replay guards.
+ *
+ * @package WCPOS\WooCommercePOS\SumUpTerminal
+ */
+
+namespace WCPOS\WooCommercePOS\SumUpTerminal\Server;
+
+use WCPOS\WooCommercePOS\SumUpTerminal\Legacy_Adoption;
+use WCPOS\WooCommercePOS\SumUpTerminal\Logger;
+use WCPOS\WooCommercePOS\SumUpTerminal\Settings;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\ProfileService;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\ReaderService;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\TransactionService;
+use WCPOS\WooCommercePOS\SumUpTerminal\Services\RefundClient as Refund_Client;
+use WCPOS\WooCommercePOSPro\Payments\Server\Money_Units;
+
+/** Solo provider, independent of the legacy order-pay flow. */
+class SumUp_Server_Provider extends \WCPOS\WooCommercePOSPro\Payments\Server\Abstract_Provider_Adapter {
+	/**
+	 * How long after our terminate an empty transaction lookup is trusted as "cancelled".
+	 * Long enough for a tap that raced the terminate to become a transaction SumUp lists;
+	 * short enough that the cashier sees the cancel confirmed, not the five-minute deadline.
+	 * Waived once SumUp's own delivery saying the checkout ended without money (`failed` or
+	 * `cancelled`) has arrived after the terminate (`reader_finished()`): the reader has then
+	 * demonstrably dropped it, and the cashier sees the cancel confirmed on the next poll,
+	 * about three seconds after the tap.
+	 */
+	public const TERMINATE_GRACE_SECONDS = 10;
+
+	/**
+	 * How long after a checkout SumUp did not answer for its reader is trusted as finished when
+	 * idle with no transaction: SumUp holds a checkout on the reader for about a minute, and a
+	 * paid one's delivery follows within seconds, so two minutes outlives both.
+	 */
+	public const UNANSWERED_GRACE_SECONDS = 120;
+
+	/** Prefix of the client id the adapter uses for a checkout SumUp did not answer for. */
+	private const UNANSWERED_PREFIX = 'row-';
+
+	/**
+	 * The markers of an unanswered checkout are non-autoloaded options, not transients: its leg is
+	 * ended through Free's deadline and the ten-minute sweep, many minutes after the checkout, and
+	 * its refund reads the client id its delivery recorded; a persistent object cache may evict a
+	 * transient at any time, which would strand the leg or block the refund. One option set per
+	 * unanswered checkout, which is rare. An attempt adopted from the old panel gets durable markers
+	 * too, for the same reason (its void comes from the sweep, minutes later); those are bounded by
+	 * the one-off upgrade that adopts them. Neither set is ever deleted.
+	 */
+
+	/** Merchant profile.
+	 *
+	 * @var ProfileService
+	 */
+	private $profile;
+	/** Reader transport.
+	 *
+	 * @var ReaderService
+	 */
+	private $readers;
+	/** Transaction transport.
+	 *
+	 * @var TransactionService
+	 */
+	private $transactions;
+	/** Refund transport.
+	 *
+	 * @var Refund_Client
+	 */
+	private $refunds;
+	/** Construction failure, returned by operations.
+	 *
+	 * @var \WP_Error|null
+	 */
+	private $initialization_error;
+
+	/**
+	 * Build the same lazily resolved services as legacy AJAX, without order writes.
+	 *
+	 * @param ProfileService|null     $profile Merchant profile.
+	 * @param ReaderService|null      $readers Reader transport.
+	 * @param TransactionService|null $transactions Transaction transport.
+	 * @param Refund_Client|null      $refunds Refund transport.
+	 */
+	public function __construct( ?ProfileService $profile = null, ?ReaderService $readers = null, ?TransactionService $transactions = null, ?Refund_Client $refunds = null ) {
+		try {
+			$key = Settings::api_key();
+			$this->profile = $profile ?? new ProfileService( $key );
+			$this->readers = $readers ?? new ReaderService( $key );
+			$this->transactions = $transactions ?? new TransactionService( $key );
+			$this->refunds = $refunds ?? new Refund_Client( $key );
+			$this->readers->set_profile_service( $this->profile );
+			$this->transactions->set_profile_service( $this->profile );
+		} catch ( \Throwable $e ) {
+			$this->initialization_error = self::error( $e );
+		}
+	}
+
+	/** {@inheritDoc} */
+	public function provider(): string {
+		return 'sumup';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param \WC_Payment_Gateway $gateway Gateway instance.
+	 */
+	public function describe( \WC_Payment_Gateway $gateway ): array {
+		$merchant = $this->call(
+			function () {
+				return $this->profile->get_merchant_code();
+			}
+		);
+		// Pro requires an array here; unavailable optional metadata is null, not an error.
+		return array(
+			'capabilities' => array(
+				'tips' => 'none',
+				'refunds' => array(
+					'via' => 'provider',
+					'partial' => true,
+				),
+				'void' => true,
+			),
+			'provider_data' => array( 'merchant_code' => is_wp_error( $merchant ) ? null : $merchant ),
+		);
+	}
+
+	/** {@inheritDoc} */
+	public function list_readers() {
+		return $this->call(
+			function () {
+				$response = $this->readers->get_all();
+				if ( false === $response || is_wp_error( $response ) ) {
+					return self::error( $response );
+				}
+				$readers = array();
+				foreach ( $response as $reader ) {
+					if ( 'expired' === ( $reader['status'] ?? '' ) || empty( $reader['id'] ) ) {
+						continue;
+					}
+					$readers[] = array(
+						'id' => $reader['id'],
+						'label' => ! empty( $reader['name'] ) ? $reader['name'] : ( ! empty( $reader['device']['identifier'] ) ? $reader['device']['identifier'] : $reader['id'] ),
+						'status' => 'paired' === ( $reader['status'] ?? '' ) ? 'online' : 'offline',
+					);
+				}
+				return $readers;
+			}
+		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param array  $row Ledger row.
+	 * @param string $reader_id Selected reader.
+	 */
+	public function create_reader_action( array $row, string $reader_id ) {
+		return $this->call(
+			function () use ( $row, $reader_id ) {
+				$order = wc_get_order( (int) $row['order_id'] );
+				if ( ! $order ) {
+					return new \WP_Error( 'wcpos_order_not_found', __( 'Order not found.', 'sumup-terminal-for-woocommerce' ), array( 'status' => 404 ) );
+				}
+				$currency = strtoupper( $row['currency'] );
+				$fraction = explode( '.', Money_Units::major( 1, $currency ) );
+				$payload = array(
+					'total_amount' => array(
+						'value' => Money_Units::minor( $row['amount'], $currency ),
+						'currency' => $currency,
+						'minor_unit' => strlen( $fraction[1] ?? '' ),
+					),
+					'description' => sprintf( 'Order #%s', $order->get_order_number() ),
+					'return_url' => self::webhook_url( $row['id'], $reader_id ),
+				);
+				// A create that got no answer may still have put OUR checkout on the reader, and the
+				// customer may pay it. SumUp's checkout has no idempotency key and the client transaction
+				// id is SumUp's, so a replay can neither resume it nor see whether it was paid: a replay
+				// dispatches NOTHING. It hands Pro a reference of the adapter's own, keyed on the row, by
+				// which the first checkout is polled (idle reader, no transaction: it ended) and cancelled
+				// (terminate the reader). The return URL carries the row id, so the first checkout settles
+				// the row by webhook if it is paid. Free appends "Provider did not answer" to the stored
+				// row's events on an unanswered create: that is the replay signal.
+				if ( ! empty( $row['events'] ) ) {
+					$unanswered = self::unanswered_id( (string) $row['id'] );
+					if ( false === self::marker( 'checkout', $unanswered ) ) {
+						// The start marker was never written: the checkout is of unknown age, so it counts
+						// as older than the grace, never as new. A cancel then records itself without
+						// terminating a reader that may be on another sale by now.
+						self::mark( 'checkout', $unanswered, microtime( true ) - self::UNANSWERED_GRACE_SECONDS - 1 );
+					}
+					return array(
+						'ref' => ( $row['provider_refs']['reader'] ?? $reader_id ) . ':' . $unanswered,
+						'expires_at' => null,
+					);
+				}
+				$affiliate = Settings::affiliate();
+				if ( '' !== $affiliate['app_id'] && '' !== $affiliate['key'] ) {
+					$payload['affiliate'] = $affiliate + array( 'foreign_transaction_id' => $row['id'] );
+				}
+				$result = $this->readers->checkout( $reader_id, $payload );
+				if ( false === $result ) {
+					$last = $this->readers->last_error();
+					$data = $last ? $last->get_error_data() : null;
+					$http = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+					if ( null === $last ) {
+						// Nothing was sent (no merchant id): final, nothing can be on the reader.
+						return self::error( false );
+					}
+					if ( $http < 400 || $http >= 500 ) {
+						// Sent and not answered (transport failure, timeout, an outage): the checkout may
+						// be on the reader. Pro replays the row; the replay above polls it from this moment.
+						self::remember( 'checkout', self::unanswered_id( (string) $row['id'] ) );
+						return $this->indeterminate( 'sumup_checkout_unanswered', $last->get_error_message() );
+					}
+					// A refused checkout (422: a currency this merchant cannot take) must reach the
+					// till with SumUp's words and its 4xx, so the app stops instead of retrying.
+					return self::error( $last ?? false, 'sumup_api_error', $http );
+				}
+				if ( is_wp_error( $result ) ) {
+					return self::error( $result );
+				}
+				if ( empty( $result['data']['client_transaction_id'] ) ) {
+					// SumUp took the POST (a 2xx) without naming the checkout, so it may be on the reader:
+					// pending under the row-keyed reference, polled and cancelled like an unanswered create.
+					self::remember( 'checkout', self::unanswered_id( (string) $row['id'] ) );
+					return $this->indeterminate( 'sumup_checkout_unanswered', 'SumUp checkout did not return a client transaction ID.' );
+				}
+				// When the reader later reports itself idle, fetch() needs to know the checkout
+				// predates that idleness (see fetch()).
+				self::remember( 'checkout', $result['data']['client_transaction_id'] );
+				// Which row this client id belongs to, so a delivery of it to another row's URL is refused.
+				set_transient( self::binding_key( $result['data']['client_transaction_id'] ), strtolower( (string) $row['id'] ), DAY_IN_SECONDS );
+				return array(
+					'ref' => $reader_id . ':' . $result['data']['client_transaction_id'],
+					'expires_at' => null,
+				);
+			}
+		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param string $ref Reader and client transaction ID.
+	 */
+	public function fetch( string $ref ) {
+		return $this->call(
+			function () use ( $ref ) {
+				list( $reader_id, $client_id ) = array_pad( explode( ':', $ref, 2 ), 2, '' );
+				if ( 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) ) {
+					return $this->fetch_unanswered( $client_id );
+				}
+				$transaction = $this->lookup( $client_id );
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				$observation = self::normalize( $transaction );
+				// SumUp records no transaction for a checkout nobody paid: a physical Solo that
+				// was terminated from the till, or that gave up on its own after about a minute,
+				// leaves the lookup empty for good, and the till would spin until the five-minute
+				// deadline (first physical run, 2026-10-05). The evidence that it is over is the
+				// authenticated reader status: the reader reports itself IDLE with a last_activity
+				// after the checkout began (or after our terminate). Only an EMPTY lookup qualifies
+				// — any transaction, in any state, is the customer's and wins — and only after a
+				// grace period, from the checkout (or terminate) and from the reader's last activity,
+				// so a tap that raced the end, or a slow customer's late tap, has time to become a
+				// transaction.
+				if ( array() === $transaction && $this->reader_finished( $reader_id, $client_id ) ) {
+					$observation['status'] = 'cancelled';
+					// Nobody paid and nobody pressed cancel on the device (that leaves a FAILED
+					// transaction): the reader timed out. The till ignores the reason when it asked
+					// for the cancel itself (that row is voided), so this only ever names a timeout.
+					$observation['failure_reason'] = 'expired';
+				}
+				return $observation;
+			}
+		);
+	}
+
+	/**
+	 * Remember that the store asked SumUp to terminate this checkout.
+	 *
+	 * Only our own terminate counts: an unsigned `failed` delivery must never end a payment,
+	 * because a late SUCCESSFUL after a failed row is ignored and the money would be lost.
+	 *
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function remember_terminated( string $client_id ): void {
+		self::remember( 'terminated', $client_id );
+	}
+
+	/**
+	 * Remember when this checkout began, when the store terminated it, or when SumUp delivered
+	 * that it ended without money.
+	 *
+	 * @param string $what      `checkout`, `terminated` or `ended`.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function remember( string $what, string $client_id ): void {
+		if ( '' === $client_id ) {
+			return;
+		}
+		// Sub-second, so a delivery and a terminate in the same second keep their order.
+		if ( ! self::mark( $what, $client_id, microtime( true ) ) ) {
+			// Without the marker the poll keeps waiting and the deadline voids the leg, as before
+			// these markers existed: slower for the cashier, never wrong about money.
+			Logger::log( "SumUp $what marker for $client_id could not be written; the cancel confirms at the deadline." );
+		}
+	}
+
+	/**
+	 * Whether the reader has finished with this checkout without a transaction: the checkout (or
+	 * our terminate) is older than the grace period, and the authenticated reader status says the
+	 * device is IDLE with activity since the checkout began, that activity itself older than the
+	 * grace. A reader still showing the amount, a status call that fails, activity older than the
+	 * checkout, or activity inside the grace all mean "still waiting".
+	 *
+	 * The grace covers a tap that raced the end: the reader goes IDLE having taken the money, and
+	 * SumUp lists the transaction a moment later. That tap may come long after the checkout began
+	 * (a slow customer) and needs no terminate, so the grace runs from the reader's last activity
+	 * too, not only from the checkout or terminate. A SumUp delivery for this checkout saying it
+	 * ended without money (`failed`/`cancelled`), arriving after our terminate, closes that race —
+	 * a successful or unknown delivery never writes the marker — so the grace is skipped and only
+	 * the reader status decides. The delivery is unsigned, which is why it never decides the
+	 * outcome itself — it only brings the authenticated check forward.
+	 *
+	 * @param string $reader_id SumUp reader ID.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private function reader_finished( string $reader_id, string $client_id ): bool {
+		if ( '' === $reader_id || '' === $client_id ) {
+			return false;
+		}
+		$started = self::marker( 'checkout', $client_id );
+		$terminated = self::marker( 'terminated', $client_id );
+		if ( false === $started && false === $terminated ) {
+			return false;
+		}
+		// The grace runs from the latest thing that happened; the reader's activity is measured
+		// from the checkout's start, because terminating a checkout the reader already dropped
+		// (its own timeout) produces no new activity on the device.
+		$latest = max( (int) $started, (int) $terminated );
+		$since  = false !== $started ? (int) $started : (int) $terminated;
+		$ended  = self::marker( 'ended', $client_id );
+		$reported = false !== $terminated && false !== $ended && (float) $ended > (float) $terminated;
+		if ( ! $reported && time() - $latest < self::TERMINATE_GRACE_SECONDS ) {
+			return false;
+		}
+		$status = $this->readers->get_status( $reader_id );
+		if ( ! is_array( $status ) ) {
+			return false;
+		}
+		$state    = $status['data']['state'] ?? $status['state'] ?? '';
+		$activity = strtotime( (string) ( $status['data']['last_activity'] ?? $status['last_activity'] ?? '' ) );
+		// The reader must also have been quiet for the grace: a customer who taps late leaves the
+		// reader IDLE with fresh activity a moment before SumUp lists the transaction.
+		return 'IDLE' === strtoupper( (string) $state ) && false !== $activity && $activity >= $since
+			&& ( $reported || time() - $activity >= self::TERMINATE_GRACE_SECONDS );
+	}
+
+	/**
+	 * Record when an attempt the old panel started reached the reader, so an adopted leg
+	 * nobody pays can be confirmed finished the way a keypad leg is (reader_finished()
+	 * measures the reader's activity from this moment) instead of waiting for the deadline
+	 * void, whose terminate would reach a reader that may be mid-sale for someone else.
+	 *
+	 * @param string $client_id SumUp client transaction id.
+	 * @param int    $started   Unix time the old panel sent the checkout.
+	 */
+	public static function mark_adopted_checkout( string $client_id, int $started ): void {
+		if ( '' === $client_id || $started <= 0 ) {
+			return;
+		}
+		// Durable: the sweep's void comes many minutes later (see the class comment).
+		self::mark( 'checkout', $client_id, (float) $started, true );
+	}
+
+	/**
+	 * The adapter's own client id for a checkout SumUp did not answer for: keyed on the row.
+	 *
+	 * @param string $payment_id Ledger row id.
+	 */
+	private static function unanswered_id( string $payment_id ): string {
+		return self::UNANSWERED_PREFIX . strtolower( $payment_id );
+	}
+
+	/**
+	 * Poll a checkout SumUp did not answer for. SumUp cannot be asked about it by client id, so:
+	 * with affiliate keys the checkout carried the row id as foreign_transaction_id and a paid one
+	 * is found that way; otherwise the leg ends only after the store's own cancel (Free's deadline,
+	 * or the cashier), once SumUp has delivered that the row's checkout ended without money or the
+	 * grace has passed, since an idle reader with no transaction also describes a paid checkout
+	 * SumUp has not listed yet. Never on the reader alone, never on an unsigned delivery alone.
+	 *
+	 * @param string $client_id The adapter's row-keyed id.
+	 * @return array Normalized observation.
+	 */
+	private function fetch_unanswered( string $client_id ): array {
+		$found       = $this->paid_unanswered( $client_id );
+		$observation = self::normalize( array() );
+		if ( is_array( $found ) ) {
+			return self::normalize( $found );
+		}
+		if ( false === $found ) {
+			// SumUp could not be asked: the next poll asks again, nothing concludes. A leg that stays
+			// here (a key that cannot list transactions) is diagnosable from this line.
+			Logger::log( 'SumUp: the transaction lookup by foreign id for ' . $client_id . ' got no answer; the leg stays pending until SumUp answers.' );
+			return $observation;
+		}
+		$terminated = self::marker( 'terminated', $client_id );
+		if ( false === $terminated ) {
+			return $observation;
+		}
+		$ended = self::marker( 'ended', $client_id );
+		if ( ( false !== $ended && (float) $ended > (float) $terminated ) || microtime( true ) - (float) $terminated >= self::UNANSWERED_GRACE_SECONDS ) {
+			$observation['status']         = 'cancelled';
+			$observation['failure_reason'] = 'expired';
+		}
+		return $observation;
+	}
+
+	/**
+	 * The paid transaction of a checkout SumUp did not answer for, when the merchant's affiliate
+	 * keys let the checkout carry the row id as foreign_transaction_id; null otherwise, or when
+	 * SumUp lists none yet or cannot be asked.
+	 *
+	 * @param string $client_id The adapter's row-keyed id.
+	 * @return array|null|false The transaction; null when none is listed or there are no affiliate
+	 *                          keys; false when SumUp could not be asked (an error, a timeout).
+	 */
+	private function paid_unanswered( string $client_id ) {
+		$affiliate = Settings::affiliate();
+		if ( '' === $affiliate['app_id'] || '' === $affiliate['key'] ) {
+			return null;
+		}
+		$row_id = substr( $client_id, strlen( self::UNANSWERED_PREFIX ) );
+		try {
+			$response = $this->transactions->find_by_foreign_transaction_id( $row_id );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		if ( null === $response ) {
+			return null; // 404: nothing listed for this row yet.
+		}
+		if ( ! is_array( $response ) ) {
+			return false;
+		}
+		foreach ( $response['items'] ?? array( $response ) as $transaction ) {
+			// The id was sent as the row carries it; SumUp echoes it as sent, the held id is lower-cased.
+			if ( 'SUCCESSFUL' === ( $transaction['status'] ?? '' ) && strtolower( (string) ( $transaction['foreign_transaction_id'] ?? $row_id ) ) === strtolower( $row_id ) ) {
+				return $transaction;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Option that records, for a row, the client transaction id whose delivery settled its money.
+	 *
+	 * @param string $payment_id Ledger row id.
+	 */
+	private static function settled_key( string $payment_id ): string {
+		return 'sutwc_settled_' . md5( $payment_id );
+	}
+
+	/**
+	 * Read a checkout marker: the durable option when there is one (an unanswered or adopted
+	 * checkout), the transient otherwise.
+	 *
+	 * @param string $what      `checkout`, `terminated` or `ended`.
+	 * @param string $client_id SumUp client transaction id, or the adapter's row-keyed id.
+	 * @return float|false
+	 */
+	private static function marker( string $what, string $client_id ) {
+		$key   = self::marker_key( $what, $client_id );
+		$value = get_option( $key, false );
+		return false === $value || '' === $value ? get_transient( $key ) : (float) $value;
+	}
+
+	/**
+	 * Write a checkout marker (see marker()): durable for an unanswered checkout, for an adopted
+	 * one (`$durable`), and for any later marker of a checkout whose start marker is durable.
+	 *
+	 * @param string $what      `checkout`, `terminated` or `ended`.
+	 * @param string $client_id SumUp client transaction id, or the adapter's row-keyed id.
+	 * @param float  $value     Unix time with fraction.
+	 * @param bool   $durable   Write the option whatever the id.
+	 */
+	private static function mark( string $what, string $client_id, float $value, bool $durable = false ): bool {
+		$key = self::marker_key( $what, $client_id );
+		if ( $durable || 0 === strpos( $client_id, self::UNANSWERED_PREFIX ) || false !== get_option( self::marker_key( 'checkout', $client_id ), false ) ) {
+			return update_option( $key, (string) $value, false ) || (float) get_option( $key ) === $value;
+		}
+		return set_transient( $key, $value, 15 * MINUTE_IN_SECONDS );
+	}
+
+	/**
+	 * Transient key for a checkout marker.
+	 *
+	 * @param string $what      `checkout`, `terminated` or `ended`.
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function marker_key( string $what, string $client_id ): string {
+		return 'sutwc_' . $what . '_' . md5( $client_id );
+	}
+
+	/**
+	 * Transient that binds an answered checkout's client transaction id to its row.
+	 *
+	 * @param string $client_id SumUp client transaction ID.
+	 */
+	private static function binding_key( string $client_id ): string {
+		return 'sutwc_row_' . md5( $client_id );
+	}
+
+	/**
+	 * The secret a result URL carries, so a delivery proves it was sent to this row's checkout.
+	 *
+	 * @param string $payment_id Ledger row id, as in the URL.
+	 * @param string $reader_id  Reader id, as in the URL.
+	 */
+	private static function webhook_token( string $payment_id, string $reader_id ): string {
+		return substr( wp_hash( 'sutwc_webhook|' . $payment_id . '|' . $reader_id ), 0, 20 );
+	}
+
+	/**
+	 * Pure projection of an observation; missing transactions remain pending.
+	 *
+	 * @param array|false $transaction Transaction or empty observation.
+	 * @return array Normalized observation.
+	 */
+	public static function normalize( $transaction ): array {
+		$transaction = is_array( $transaction ) ? $transaction : array();
+		// SumUp reports a terminated checkout and a declined card identically (FAILED, no reason),
+		// so both become `cancelled`: Pro's Status_Map turns that into `voided` when the till asked
+		// for the cancel and into a cancelled failure otherwise, which is what the device showed.
+		$states = array(
+			'PENDING' => 'in_progress',
+			'SUCCESSFUL' => 'completed',
+			'FAILED' => 'cancelled',
+			'CANCELLED' => 'cancelled',
+		);
+		$currency = ! empty( $transaction['currency'] ) ? strtoupper( $transaction['currency'] ) : null;
+		$result = array(
+			'status' => $states[ $transaction['status'] ?? '' ] ?? 'pending',
+			// FAILED is a declined card OR a cancel on the reader; the till keeps `voided` when it
+			// asked for the cancel, and otherwise reads this reason instead of "cancelled".
+			'failure_reason' => 'FAILED' === ( $transaction['status'] ?? '' ) ? 'declined_or_cancelled' : null,
+			'amount' => isset( $transaction['amount'], $currency ) ? Money_Units::major( Money_Units::minor( (string) $transaction['amount'], $currency ), $currency ) : null,
+			'currency' => $currency,
+			'provider_refs' => array(
+				'sumup_transaction' => $transaction['id'] ?? null,
+				'sumup_transaction_code' => $transaction['transaction_code'] ?? null,
+				'sumup_client_transaction' => $transaction['client_transaction_id'] ?? null,
+				// The reference a historical webview row refunds by: the old panel stored the client
+				// transaction id as the order's transaction id.
+				'transaction_id' => $transaction['client_transaction_id'] ?? null,
+			),
+			'receipt' => array_filter(
+				array(
+					'card_last4' => $transaction['card']['last_4_digits'] ?? null,
+					'card_type' => $transaction['card']['type'] ?? null,
+					'entry_mode' => $transaction['entry_mode'] ?? null,
+					'payment_type' => $transaction['payment_type'] ?? null,
+					'transaction_code' => $transaction['transaction_code'] ?? null,
+				),
+				static function ( $value ) {
+					return is_string( $value ) && '' !== $value;
+				}
+			),
+		);
+		return $result;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param string $ref Reader and client transaction ID.
+	 */
+	public function cancel( string $ref ) {
+		return $this->call(
+			function () use ( $ref ) {
+				$parts = explode( ':', $ref, 2 );
+				$transaction = $this->lookup( $parts[1] ?? '' );
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				$status = $transaction['status'] ?? '';
+				if ( 'SUCCESSFUL' === $status ) {
+					return 'requested';
+				}
+				if ( in_array( $status, array( 'FAILED', 'CANCELLED' ), true ) ) {
+					return 'final';
+				}
+				$held = 0 === strpos( $parts[1] ?? '', self::UNANSWERED_PREFIX );
+				// An attempt adopted from the old panel is voided by the sweep, possibly long after it
+				// left the reader: the same age guard keeps its terminate off another sale.
+				if ( $held || Legacy_Adoption::is_adopted( $ref ) ) {
+					if ( $held && is_array( $this->paid_unanswered( $parts[1] ) ) ) {
+						return 'requested'; // The money is listed: the next poll captures it.
+					}
+					$started = self::marker( 'checkout', $parts[1] ?? '' );
+					if ( false === $started || microtime( true ) - (float) $started > self::UNANSWERED_GRACE_SECONDS ) {
+						// SumUp holds a checkout on the reader for about a minute: this one is over, and
+						// a terminate now would reach whatever sale the reader is on. The store's cancel
+						// is recorded without being sent; the poll concludes after the grace.
+						self::remember_terminated( $parts[1] ?? '' );
+						return 'requested';
+					}
+				}
+				$result = $this->readers->cancel_checkout( $parts[0] );
+				// Terminate is asynchronous; acceptance never proves that money was not taken.
+				if ( false === $result || is_wp_error( $result ) ) {
+					$last = is_wp_error( $result ) ? $result : $this->readers->last_error();
+					$data = $last ? $last->get_error_data() : null;
+					$http = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+					if ( $http >= 400 && $http < 500 ) {
+						// The reader is not waiting for a card: there is nothing to terminate, the
+						// checkout already ended. The poll confirms it from the reader, as after a terminate.
+						self::remember_terminated( $parts[1] ?? '' );
+						return 'requested';
+					}
+					return self::error( $last ?? $result );
+				}
+				// The next poll confirms the cancel when SumUp still has no transaction (see fetch()).
+				self::remember_terminated( $parts[1] ?? '' );
+				return 'requested';
+			}
+		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param array  $row Ledger row.
+	 * @param int    $refund_id WooCommerce refund ID.
+	 * @param string $amount Decimal major units.
+	 */
+	public function refund( array $row, int $refund_id, string $amount ) {
+		return $this->call(
+			function () use ( $row, $amount ) {
+				$ref = $row['provider_refs']['action'] ?? '';
+				$id = '' !== $ref ? ( explode( ':', $ref, 2 )[1] ?? '' ) : (string) ( $row['provider_refs']['sumup_client_transaction'] ?? $row['provider_refs']['transaction_id'] ?? '' );
+				if ( 0 === strpos( $id, self::UNANSWERED_PREFIX ) ) {
+					// The checkout SumUp did not answer for was paid and settled by its delivery, which
+					// recorded the client transaction id against the row.
+					$found = $this->paid_unanswered( $id );
+					$id    = is_array( $found ) ? (string) ( $found['client_transaction_id'] ?? '' ) : (string) get_option( self::settled_key( strtolower( (string) $row['id'] ) ), '' );
+				}
+				$transaction = $this->lookup( $id );
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				if ( 'SUCCESSFUL' !== ( $transaction['status'] ?? '' ) || empty( $transaction['id'] ) ) {
+					return self::error( 'No successful SumUp transaction found for refund.', 'transaction_not_found' );
+				}
+				$currency = strtoupper( $transaction['currency'] ?? $row['currency'] );
+				$full = isset( $transaction['amount'] ) && Money_Units::minor( $amount, $currency ) === Money_Units::minor( (string) $transaction['amount'], $currency );
+				// SumUp's refund has no idempotency key, so a refund sent again is a second refund. Only a
+				// 4xx proves SumUp refused it: that error frees the amount for a retry. Any other answer (a
+				// throw, no response, a 5xx, an unexpected 2xx or 3xx) may follow a refund SumUp made, so
+				// it is indeterminate: Free keeps the reservation until staff confirm it in SumUp.
+				try {
+					$result = $this->refunds->refund( $transaction['id'], $full ? null : (float) $amount );
+				} catch ( \Throwable $e ) {
+					$result = null;
+				}
+				if ( true === $result ) {
+					return array(
+						'status' => 'succeeded',
+						'provider_ref' => $transaction['id'],
+					);
+				}
+				if ( Refund_Client::refused( $result ) ) {
+					return self::error( $result );
+				}
+				return $this->indeterminate( 'sumup_refund_unanswered', Refund_Client::UNANSWERED_MESSAGE );
+			}
+		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param \WP_REST_Request $request Unsigned SumUp delivery.
+	 */
+	public function verify_webhook( \WP_REST_Request $request ) {
+		return $this->call(
+			function () use ( $request ) {
+				$query  = $request->get_query_params();
+				$id     = $query['payment'] ?? '';
+				$reader = is_string( $query['reader'] ?? null ) ? $query['reader'] : '';
+				$valid  = is_string( $id ) && preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id );
+				$event  = $request->get_json_params();
+				// The reference is looked up locally BEFORE any outbound call: an attempt Pro adopted
+				// carries a row id the URL cannot know, and the action reference (reader and client
+				// transaction id) resolves it. A delivery naming neither a POS payment nor an adopted
+				// attempt is acknowledged so SumUp stops retrying, and asks SumUp nothing.
+				$client  = $event['payload']['client_transaction_id'] ?? '';
+				$adopted = '' !== $reader && is_string( $client ) && '' !== $client && \function_exists( 'wcpos_pro_payment_id_for_action' ) ? wcpos_pro_payment_id_for_action( $this->provider(), $reader . ':' . $client ) : null;
+				$is_adopted = is_string( $adopted ) && '' !== $adopted;
+				if ( ! $valid && ! $is_adopted ) {
+					return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
+				}
+				// The URL's token proves the delivery was sent to this row's checkout; a checkout started
+				// before the token existed has none and is left to the poll. A client id bound to another
+				// row is refused too; a binding the cache evicted refuses nothing: the token is the guard,
+				// this check is defence in depth.
+				$token = $query['token'] ?? '';
+				$bound = is_string( $client ) && '' !== $client ? get_transient( self::binding_key( $client ) ) : false;
+				if ( ! $is_adopted && ( ! is_string( $token ) || ! hash_equals( self::webhook_token( $id, $reader ), $token ) || ( false !== $bound && strtolower( $id ) !== $bound ) ) ) {
+					return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
+				}
+				if ( 'solo.transaction.updated' !== ( $event['event_type'] ?? '' ) ) {
+					return new \WP_Error( 'sumup_webhook_ignored', 'Event type not handled.', array( 'status' => 200 ) );
+				}
+				$merchant = $this->call(
+					function () {
+						return $this->profile->get_merchant_code();
+					}
+				);
+				if ( is_wp_error( $merchant ) ) {
+					return self::error( $merchant );
+				}
+				if ( ( $event['payload']['merchant_code'] ?? null ) !== $merchant ) {
+					return new \WP_Error( 'sumup_webhook_merchant_mismatch', 'SumUp merchant mismatch.', array( 'status' => 403 ) );
+				}
+				$client_id = $event['payload']['client_transaction_id'] ?? '';
+				if ( ! is_string( $client_id ) || '' === $client_id ) {
+					return new \WP_Error( 'sumup_webhook_invalid', 'Missing client transaction ID.', array( 'status' => 400 ) );
+				}
+				if ( is_string( $adopted ) && '' !== $adopted ) {
+					$id = $adopted; // Settled only now, after the merchant check: the adopted row's id.
+				}
+				// The authenticated lookup, never the unsigned body, is the money evidence.
+				$transaction = $this->lookup( $client_id );
+				if ( is_wp_error( $transaction ) ) {
+					return $transaction;
+				}
+				$paid     = is_array( $transaction ) && 'SUCCESSFUL' === ( $transaction['status'] ?? '' );
+				$held_key = is_string( $id ) ? self::unanswered_id( $id ) : '';
+				$affiliate = Settings::affiliate();
+				// With affiliate keys, an unanswered row's checkout carried the row id as foreign id. The
+				// client-id lookup need not echo it, so SumUp's listing by that id must name this client id.
+				if ( $paid && '' !== $held_key && false !== self::marker( 'checkout', $held_key ) && '' !== $affiliate['app_id'] && '' !== $affiliate['key'] ) {
+					$own = $this->paid_unanswered( $held_key );
+					if ( false === $own ) {
+						return self::error( 'SumUp API request failed.' ); // As a failed lookup() answers.
+					}
+					if ( ! is_array( $own ) || strtolower( (string) ( $own['client_transaction_id'] ?? '' ) ) !== strtolower( $client_id ) ) {
+						return new \WP_Error( 'sumup_webhook_unknown_payment', 'Unknown POS payment.', array( 'status' => 200 ) );
+					}
+				}
+				// SumUp says the checkout ended without money: the poll may confirm our terminate at
+				// once. A successful (or unknown) delivery must not — SumUp may not list the
+				// transaction yet, and an IDLE reader would read as cancelled while the money moved.
+				if ( in_array( strtolower( (string) ( $event['payload']['status'] ?? '' ) ), array( 'failed', 'cancelled' ), true ) ) {
+					self::remember( 'ended', $client_id );
+					// A row whose create SumUp did not answer knows no client id; its poll reads this
+					// marker, and only after the store's own cancel (the delivery is unsigned: alone it
+					// never ends a leg), and only when the lookup does not contradict it.
+					if ( '' !== $held_key && ! $paid && false !== self::marker( 'checkout', $held_key ) ) {
+						self::remember( 'ended', $held_key ); // Only a row whose create went unanswered has the marker.
+					}
+				}
+				$patch = self::webhook_patch( $event, $transaction );
+				if ( 'captured' === ( $patch['status'] ?? '' ) && '' !== $held_key && false !== self::marker( 'checkout', $held_key ) ) {
+					// Only a row whose create SumUp did not answer (its start marker exists) knows no
+					// client id; its refund reads this. Ordinary rows carry the id in their action.
+					update_option( self::settled_key( strtolower( $id ) ), $client_id, false );
+				}
+				return array(
+					'payment_id' => strtolower( $id ),
+					'patch' => $patch,
+				);
+			}
+		);
+	}
+
+	/**
+	 * Polling owns non-money outcomes; settlement must preserve Pro's references.
+	 *
+	 * The event id derives from the observation (client transaction id, delivered status, and the
+	 * authenticated lookup's status), never from SumUp's delivery id: Free compares ids for
+	 * equality only, so a delivery whose money the lookup could not yet confirm must not spend the
+	 * id a later, confirmed delivery of the same outcome will carry.
+	 *
+	 * @param array       $event SumUp event.
+	 * @param array|false $transaction Authoritative transaction.
+	 * @return array Settlement patch, never provider_refs.
+	 */
+	public static function webhook_patch( array $event, $transaction ): array {
+		$payload = $event['payload'];
+		// A delivery may omit fields; treat a missing status as a non-money event.
+		$status = strtolower( (string) ( $payload['status'] ?? '' ) );
+		$patch = array( 'event_id' => $payload['client_transaction_id'] . ':' . ( '' !== $status ? $status : 'unknown' ) . ':' . ( is_array( $transaction ) && ! empty( $transaction['status'] ) ? $transaction['status'] : 'none' ) );
+		if ( 'successful' === $status && 'SUCCESSFUL' === ( $transaction['status'] ?? '' ) && ( $transaction['client_transaction_id'] ?? null ) === $payload['client_transaction_id'] ) {
+			$normalized = self::normalize( $transaction );
+			$patch += array(
+				'status' => 'captured',
+				'amount' => $normalized['amount'],
+				'currency' => $normalized['currency'],
+				'receipt' => $normalized['receipt'],
+			);
+		}
+		return $patch;
+	}
+
+	/**
+	 * Build the shared result URL, separate from legacy admin-ajax.
+	 *
+	 * @param string $payment_id Ledger UUID.
+	 * @param string $reader_id  Reader the checkout went to; with the client transaction id, the action reference.
+	 * @return string Result webhook URL.
+	 */
+	public static function webhook_url( string $payment_id, string $reader_id = '' ): string {
+		$args = array(
+			'provider' => 'sumup',
+			'payment' => $payment_id,
+		);
+		if ( '' !== $reader_id ) {
+			$args['reader'] = $reader_id; // With the client transaction id, the action reference an adoption is keyed by.
+		}
+		$args['token'] = self::webhook_token( $payment_id, $reader_id );
+		return add_query_arg( $args, rest_url( 'wcpos/v2/payments/webhook' ) );
+	}
+
+	/**
+	 * Select only the requested transaction from either API response shape.
+	 *
+	 * @param string $client_id Client transaction ID.
+	 * @return array|\WP_Error Matching transaction, empty observation or transport error.
+	 */
+	private function lookup( string $client_id ) {
+		$response = $this->call(
+			function () use ( $client_id ) {
+				return $this->transactions->find_by_client_transaction_id( $client_id );
+			}
+		);
+		if ( is_wp_error( $response ) ) {
+			return self::error( $response );
+		}
+		if ( null === $response ) {
+			// SumUp has no transaction for this checkout yet: still waiting on the device.
+			return array();
+		}
+		foreach ( $response['items'] ?? array( $response ) as $transaction ) {
+			if ( '' !== $client_id && ( $transaction['client_transaction_id'] ?? null ) === $client_id ) {
+				return $transaction;
+			}
+		}
+		return array();
+	}
+
+	/**
+	 * Contain service failures while preserving intentional adapter errors.
+	 *
+	 * @param callable $operation Provider operation.
+	 * @return mixed Result or provider error.
+	 */
+	private function call( callable $operation ) {
+		if ( $this->initialization_error ) {
+			return $this->initialization_error;
+		}
+		try {
+			$result = $operation();
+			if ( false === $result ) {
+				return self::error( 'SumUp API request failed.' );
+			}
+			return $result;
+		} catch ( \Throwable $e ) {
+			return self::error( $e );
+		}
+	}
+
+	/**
+	 * Preserve provider detail inside Pro's shared error envelope.
+	 *
+	 * @param \WP_Error|\Throwable|string $error Service failure.
+	 * @param string                      $code Local error code.
+	 * @param int                         $status HTTP status for the envelope: 502 is retried by the till as
+	 *                                            transport; a 4xx SumUp answered with is final.
+	 * @return \WP_Error Provider error.
+	 */
+	private static function error( $error, string $code = 'sumup_api_error', int $status = 502 ): \WP_Error {
+		if ( is_wp_error( $error ) ) {
+			if ( 'wcpos_provider_error' === $error->get_error_code() ) {
+				return $error;
+			}
+			$code = $error->get_error_code() ? (string) $error->get_error_code() : $code;
+			$message = $error->get_error_message();
+		} elseif ( $error instanceof \Throwable ) {
+			$code = $error->getCode() ? (string) $error->getCode() : $code;
+			$message = $error->getMessage();
+		} else {
+			$message = false === $error ? 'SumUp API request failed.' : $error;
+		}
+		return new \WP_Error(
+			'wcpos_provider_error',
+			$message,
+			array(
+				'status' => $status,
+				'detail' => array(
+					'code' => $code,
+					'message' => $message,
+				),
+			)
+		);
+	}
+}

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SumUp Terminal for WooCommerce
  * Description: Adds SumUp Terminal support to WooCommerce for in-person payments.
- * Version:     0.0.14
+ * Version:     2.0.0
  * Author:      kilbot
  * Author URI:  https://kilbot.com/
  * Update URI:  https://github.com/wcpos/sumup-terminal-for-woocommerce
@@ -12,6 +12,8 @@
  * Requires at least: 5.2
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
+ *
+ * @package WCPOS\WooCommercePOS\SumUpTerminal
  */
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal;
@@ -21,7 +23,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 }
 
 // Define constants.
-\define( 'SUTWC_VERSION', '0.0.14' );
+\define( 'SUTWC_VERSION', '2.0.0' );
 \define( 'SUTWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 \define( 'SUTWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 \define( 'SUTWC_MINIMUM_PHP_VERSION', '7.4' );
@@ -66,6 +68,9 @@ spl_autoload_register(
  */
 function sutwc_activate(): void {
 	if ( PHP_VERSION_ID >= SUTWC_MINIMUM_PHP_VERSION_ID ) {
+		if ( \function_exists( 'wcpos_pro_requires' ) ) {
+			wcpos_pro_requires( Server\Registration::REQUIRED_PRO_VERSION, __FILE__ );
+		}
 		return;
 	}
 
@@ -90,10 +95,33 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\sutwc_activate' );
  * Initialize the plugin.
  */
 function init(): void {
+	// Terminal extensions are Pro-only at 2.0: the keypad modes and the order-pay panel both
+	// rely on Pro's shared payments base.
+	if ( ! \function_exists( 'wcpos_pro_requires' ) || ! wcpos_pro_requires( Server\Registration::REQUIRED_PRO_VERSION, __FILE__ ) ) {
+		add_action(
+			'admin_notices',
+			static function (): void {
+				echo '<div class="notice notice-error"><p>' . esc_html__( 'SumUp Terminal for WooCommerce needs WooCommerce POS Pro 2.0.0 or newer.', 'sumup-terminal-for-woocommerce' ) . '</p></div>';
+			}
+		);
+		return;
+	}
+
 	// Register the gateway.
 	add_filter( 'woocommerce_payment_gateways', array( Gateway::class, 'register_gateway' ) );
+
+	// The keypad's server and device modes, on Pro's shared base.
+	Server\Registration::register();
+
+	// Fold attempts the old order-pay panel left mid-flight into Pro's ledger, and complete
+	// recorded successes on Free's payments sweep, off the request path.
+	add_action( 'init', array( Legacy_Adoption::class, 'upgrade' ), 20 );
+	add_action( Legacy_Adoption::SWEEP_HOOK, array( Legacy_Adoption::class, 'complete_recorded_page' ) );
 
 	// Initialize AJAX handlers early.
 	new AjaxHandler();
 }
-add_action( 'plugins_loaded', __NAMESPACE__ . '\init', 11 );
+// Pro defines wcpos_pro_requires() and the provider registration API from its own
+// plugins_loaded hook at priority 20; the gate must run after that.
+add_action( 'plugins_loaded', __NAMESPACE__ . '\init', 30 );
+add_action( 'plugins_loaded', array( Server\Pos_Reader_Settings::class, 'migrate_once' ), 31 );

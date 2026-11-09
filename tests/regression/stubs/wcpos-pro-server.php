@@ -1,0 +1,112 @@
+<?php
+// phpcs:ignoreFile -- Standalone doubles mirror WordPress and Pro names, not plugin globals.
+namespace {
+	if ( ! function_exists( 'wcpos_pro_register_device_provider' ) && empty( $GLOBALS['without_device_contract'] ) ) {
+		function wcpos_pro_register_device_provider( string $gateway_id, string $adapter_class ): void { $GLOBALS['device_registered'][] = array( $gateway_id, $adapter_class ); }
+	}
+	if ( ! class_exists( 'WP_Error' ) ) {
+		class WP_Error {
+			private $code;
+			private $message;
+			private $data;
+			public function __construct( $code, $message, $data = null ) { $this->code = $code; $this->message = $message; $this->data = $data; }
+			public function get_error_code() { return $this->code; }
+			public function get_error_message() { return $this->message; }
+			public function get_error_data() { return $this->data; }
+		}
+	}
+	if ( ! function_exists( 'is_wp_error' ) ) { function is_wp_error( $value ) { return $value instanceof WP_Error; } }
+	if ( ! class_exists( 'WP_REST_Request' ) ) {
+		class WP_REST_Request {
+			private $params = array();
+			private $query = array();
+			private $json = array();
+			public function set_query_params( $query ) { $this->query = $query; }
+			public function get_query_params() { return $this->query; }
+			public function set_body( $body ) { $this->json = json_decode( $body, true ); }
+			public function get_json_params() { return $this->json; }
+			public function set_param( $key, $value ) { $this->params[ $key ] = $value; }
+			public function get_param( $key ) { return $this->params[ $key ] ?? null; }
+		}
+	}
+	if ( ! class_exists( 'WC_Payment_Gateway' ) ) { class WC_Payment_Gateway {} }
+	if ( ! function_exists( 'rest_url' ) ) { function rest_url( $path ) { return 'https://shop.example/wp-json/' . $path; } }
+	if ( ! function_exists( 'add_query_arg' ) ) {
+		function add_query_arg( $key, $value, $url = '' ) {
+			$args = is_array( $key ) ? $key : array( $key => $value );
+			$url = is_array( $key ) ? $value : $url;
+			return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . http_build_query( $args );
+		}
+	}
+	if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return $GLOBALS['options'][ $key ] ?? $default; } }
+	if ( ! function_exists( 'update_option' ) ) { function update_option( $key, $value, $autoload = null ) { $GLOBALS['options'][ $key ] = $value; return true; } }
+	if ( ! function_exists( 'get_transient' ) ) { function get_transient( $key ) { return $GLOBALS['transients'][ $key ] ?? false; } }
+	if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $ttl ) { if ( ! empty( $GLOBALS['transient_write_fails'] ) ) { return false; } $GLOBALS['transients'][ $key ] = $value; $GLOBALS['ttls'][ $key ] = $ttl; return true; } }
+	if ( ! function_exists( 'delete_transient' ) ) { function delete_transient( $key ) { unset( $GLOBALS['transients'][ $key ] ); return true; } }
+	if ( ! defined( 'MINUTE_IN_SECONDS' ) ) { define( 'MINUTE_IN_SECONDS', 60 ); }
+	if ( ! defined( 'DAY_IN_SECONDS' ) ) { define( 'DAY_IN_SECONDS', 86400 ); }
+	if ( ! function_exists( 'delete_option' ) ) { function delete_option( $key ) { unset( $GLOBALS['options'][ $key ] ); return true; } }
+	if ( ! function_exists( 'wc_get_order' ) ) { function wc_get_order( $id ) { return $GLOBALS['orders'][ $id ] ?? false; } }
+	if ( ! function_exists( '__' ) ) { function __( $text, $domain = null ) { return $text; } }
+	if ( ! function_exists( 'wp_hash' ) ) { function wp_hash( $data ) { return hash_hmac( 'md5', $data, 'test-salt' ); } }
+	// A caching get_option (legacy-adoption.php) keeps its request cache here.
+	if ( ! function_exists( 'wp_cache_delete' ) ) { function wp_cache_delete( $key, $group = '' ) { unset( $GLOBALS['wp_cache'][ $group ][ $key ] ); return true; } }
+}
+namespace WCPOS\WooCommercePOSPro\Payments\Server {
+	if ( ! interface_exists( __NAMESPACE__ . '\\Provider_Adapter_Interface' ) ) {
+		interface Provider_Adapter_Interface {
+			public function provider(): string;
+			public function describe( \WC_Payment_Gateway $gateway ): array;
+			public function list_readers();
+			public function create_reader_action( array $row, string $reader_id );
+			public function fetch( string $ref );
+			public function cancel( string $ref );
+			public function capture( string $ref );
+			public function refund( array $row, int $refund_id, string $amount );
+			public function verify_webhook( \WP_REST_Request $request );
+		}
+	}
+	if ( ! class_exists( __NAMESPACE__ . '\\Abstract_Provider_Adapter' ) ) {
+		abstract class Abstract_Provider_Adapter implements Provider_Adapter_Interface {
+			/** Keep a potentially dispatched charge pending when the provider cannot answer. */
+			protected function indeterminate( string $code, string $message ): \WP_Error {
+				return new \WP_Error( $code, $message, array( 'indeterminate' => true, 'status' => 502 ) );
+			}
+			public function describe( \WC_Payment_Gateway $gateway ): array { return array(); }
+			public function capture( string $ref ) { return $this->unsupported(); }
+			public function refund( array $row, int $refund_id, string $amount ) { return $this->unsupported(); }
+			public function verify_webhook( \WP_REST_Request $request ) { return $this->unsupported(); }
+			protected function event( array $row, string $level, string $message ): array { return Event_Log::append( $row, $level, $message ); }
+			private function unsupported(): \WP_Error { return new \WP_Error( 'wcpos_capture_mode_unsupported', __( 'This payment provider does not support that operation.', 'woocommerce-pos-pro' ), array( 'status' => 501 ) ); }
+		}
+	}
+	if ( ! class_exists( __NAMESPACE__ . '\\Event_Log' ) ) {
+		final class Event_Log {
+			public static function append( array $row, string $level, string $message, array $context = array() ): array {
+				$row['events'][] = array( 't' => gmdate( 'c' ), 'level' => $level, 'message' => $message );
+				return $row;
+			}
+		}
+	}
+}
+
+namespace WCPOS\WooCommercePOSPro\Payments\Server {
+	class Money_Units {
+		private static function exponent( string $currency ): int { return array( 'JPY' => 0, 'HUF' => 0, 'KWD' => 3 )[ strtoupper( $currency ) ] ?? 2; }
+		public static function minor( string $amount, string $currency ): int { return (int) round( (float) $amount * ( 10 ** self::exponent( $currency ) ) ); }
+		public static function major( int $minor, string $currency ): string { return number_format( $minor / ( 10 ** self::exponent( $currency ) ), self::exponent( $currency ), '.', '' ); }
+	}
+}
+
+namespace WCPOS\WooCommercePOSPro\Payments\Device {
+	abstract class Abstract_Device_Provider_Adapter {
+		abstract public function provider(): string;
+		abstract public function describe( \WC_Payment_Gateway $gateway ): array;
+		abstract public function bootstrap( \WC_Payment_Gateway $gateway, array $context );
+		abstract public function create_intent( array $row, array $context );
+		abstract public function fetch( string $ref );
+		abstract public function cancel( string $ref );
+		abstract public function refund( array $row, int $refund_id, string $amount );
+		public function capture( string $ref ) { return new \WP_Error( 'wcpos_capture_mode_unsupported', 'This payment provider does not support that operation.', array( 'status' => 501 ) ); }
+	}
+}

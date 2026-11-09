@@ -23,4 +23,10 @@ interface ReaderApiClientInterface {
 	public function set_merchant_id( $merchant_id ): void;
 	public function get_merchant_id();
 	public function has_api_key();
+	/**
+	 * Why the last call returned false, with SumUp's HTTP status in its data.
+	 *
+	 * @return null|\WP_Error
+	 */
+	public function last_error();
 }
