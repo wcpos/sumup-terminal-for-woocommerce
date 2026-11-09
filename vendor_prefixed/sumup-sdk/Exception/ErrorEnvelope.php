@@ -8,16 +8,12 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception;
 class ErrorEnvelope
 {
     private int $status;
-
     private string $message;
-
     private mixed $raw;
-
     /**
      * @var array<string, array<int, string>>
      */
     private array $headers;
-
     /**
      * @param array<string, array<int, string>> $headers
      */
@@ -28,22 +24,18 @@ class ErrorEnvelope
         $this->raw = $raw;
         $this->headers = $headers;
     }
-
     public function getStatus(): int
     {
         return $this->status;
     }
-
     public function getMessage(): string
     {
         return $this->message;
     }
-
     public function getRaw(): mixed
     {
         return $this->raw;
     }
-
     /**
      * @return array<string, array<int, string>>
      */
@@ -51,17 +43,11 @@ class ErrorEnvelope
     {
         return $this->headers;
     }
-
     /**
      * @return array<string, int|string|array<string, array<int, string>>|mixed>
      */
     public function toArray(): array
     {
-        return [
-            'status' => $this->status,
-            'message' => $this->message,
-            'raw' => $this->raw,
-            'headers' => $this->headers,
-        ];
+        return ['status' => $this->status, 'message' => $this->message, 'raw' => $this->raw, 'headers' => $this->headers];
     }
 }

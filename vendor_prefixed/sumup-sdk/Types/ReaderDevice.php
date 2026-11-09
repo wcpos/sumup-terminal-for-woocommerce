@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,12 +14,10 @@ class ReaderDevice
      * @var string
      */
     public string $identifier;
-
     /**
      * Identifier of the model of the device.
      *
      * @var ReaderDeviceModel
      */
     public ReaderDeviceModel $model;
-
 }

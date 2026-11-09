@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -17,19 +16,16 @@ class CreateReaderCheckoutRequestAade
      * @var string
      */
     public string $providerId;
-
     /**
      * The base64 encoded signature of the transaction data.
      *
      * @var string
      */
     public string $signature;
-
     /**
      * The string containing the signed transaction data.
      *
      * @var string
      */
     public string $signatureData;
-
 }

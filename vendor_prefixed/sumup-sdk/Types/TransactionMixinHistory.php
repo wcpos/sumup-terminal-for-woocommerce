@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,26 +14,22 @@ class TransactionMixinHistory
      * @var string|null
      */
     public ?string $productSummary = null;
-
     /**
      * Total number of payouts to the registered user specified in the `user` property.
      *
      * @var int|null
      */
     public ?int $payoutsTotal = null;
-
     /**
      * Number of payouts that are made to the registered user specified in the `user` property.
      *
      * @var int|null
      */
     public ?int $payoutsReceived = null;
-
     /**
      * Payout plan of the registered user at the time when the transaction was made.
      *
      * @var TransactionMixinHistoryPayoutPlan|null
      */
     public ?TransactionMixinHistoryPayoutPlan $payoutPlan = null;
-
 }

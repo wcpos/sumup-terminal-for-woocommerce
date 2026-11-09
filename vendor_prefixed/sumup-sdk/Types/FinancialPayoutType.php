@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * High-level payout record category.
  */
-enum FinancialPayoutType: string
+enum FinancialPayoutType : string
 {
     case PAYOUT = 'PAYOUT';
     case CHARGE_BACK_DEDUCTION = 'CHARGE_BACK_DEDUCTION';

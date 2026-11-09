@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 class NotFoundErrors
@@ -12,5 +11,4 @@ class NotFoundErrors
      * @var string
      */
     public string $detail;
-
 }

@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Simple name of the payment type.
  */
-enum TransactionFullSimplePaymentType: string
+enum TransactionFullSimplePaymentType : string
 {
     case CASH = 'CASH';
     case CC_SIGNATURE = 'CC_SIGNATURE';

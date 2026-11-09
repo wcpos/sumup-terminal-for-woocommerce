@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Type of connection used by the device
  */
-enum StatusResponseDataConnectionType: string
+enum StatusResponseDataConnectionType : string
 {
     case BTLE = 'btle';
     case EDGE = 'edge';

@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Customers;
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
@@ -11,7 +10,6 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestH
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
-
 class CustomersUpdateRequest
 {
     /**
@@ -20,20 +18,15 @@ class CustomersUpdateRequest
      * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PersonalDetails|null
      */
     public ?\WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PersonalDetails $personalDetails = null;
-
     /**
      * Create request DTO.
      *
      * @param \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PersonalDetails|null $personalDetails
      */
-    public function __construct(
-        ?\WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PersonalDetails $personalDetails = null
-    ) {
-        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
-            'personal_details' => $personalDetails,
-        ], self::class, $this);
+    public function __construct(?\WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PersonalDetails $personalDetails = null)
+    {
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate(['personal_details' => $personalDetails], self::class, $this);
     }
-
     /**
      * Create request DTO from an associative array.
      *
@@ -43,20 +36,17 @@ class CustomersUpdateRequest
     {
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
-
         return $request;
     }
-
 }
-
 /**
  * Class Customers
  *
- * Allow your regular customers to save their information with the Customers model.
+ * Customers represent payers in your integration. Create a customer with your own `customer_id` to associate their personal details and saved payment instruments with your business records.
  *
- * This will prevent re-entering payment instrument information for recurring payments on your platform.
+ * To save a card, create a checkout for that customer with `purpose = SETUP_RECURRING_PAYMENT`, then process it with the payer's consent and mandate details. See the [tokenization guide](https://developer.sumup.com/online-payments/guides/tokenization-with-payment-sdk/).
  *
- * Depending on the needs you can allow, creating, listing or deactivating payment instruments & creating, retrieving and updating customers.
+ * Use the Customers endpoints to create, retrieve, or update customer details and to list or deactivate saved payment instruments. For subsequent payments, process a new checkout with the saved instrument's `token` and its associated `customer_id`.
  *
  * @package SumUp\Services
  */
@@ -68,14 +58,12 @@ class Customers implements SumUpService
      * @var HttpClientInterface
      */
     protected HttpClientInterface $client;
-
     /**
      * The access token needed for authentication for the services.
      *
      * @var string
      */
     protected string $accessToken;
-
     /**
      * Customers constructor.
      *
@@ -87,7 +75,6 @@ class Customers implements SumUpService
         $this->client = $client;
         $this->accessToken = $accessToken;
     }
-
     /**
      * Create a customer
      *
@@ -110,23 +97,13 @@ class Customers implements SumUpService
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer::class],
-        ], [
-            '400' => ['type' => 'mixed'],
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class],
-            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'POST', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer::class]], ['400' => ['type' => 'mixed'], '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class], '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'POST', $path);
     }
-
     /**
      * Deactivate a payment instrument
      *
-     * @param string $customerId Unique ID of the saved customer resource.
+     * @param string $customerId The `customer_id` you supplied when creating the customer.
      * @param string $token Unique token identifying the card saved as a payment instrument resource.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
@@ -141,23 +118,13 @@ class Customers implements SumUpService
         $path = sprintf('/v0.1/customers/%s/payment-instruments/%s', rawurlencode((string) $customerId), rawurlencode((string) $token));
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('DELETE', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '204' => ['type' => 'void'],
-        ], [
-            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'DELETE', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['204' => ['type' => 'void']], ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class], '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'DELETE', $path);
     }
-
     /**
      * Retrieve a customer
      *
-     * @param string $customerId Unique ID of the saved customer resource.
+     * @param string $customerId The `customer_id` you supplied when creating the customer.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer
@@ -171,20 +138,13 @@ class Customers implements SumUpService
         $path = sprintf('/v0.1/customers/%s', rawurlencode((string) $customerId));
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer::class, [
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer::class, ['401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'GET', $path);
     }
-
     /**
      * List payment instruments
      *
-     * @param string $customerId Unique ID of the saved customer resource.
+     * @param string $customerId The `customer_id` you supplied when creating the customer.
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
      * @return \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PaymentInstrumentResponse[]
@@ -198,22 +158,13 @@ class Customers implements SumUpService
         $path = sprintf('/v0.1/customers/%s/payment-instruments', rawurlencode((string) $customerId));
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '200' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PaymentInstrumentResponse::class]],
-        ], [
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['200' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\PaymentInstrumentResponse::class]]], ['401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'GET', $path);
     }
-
     /**
      * Update a customer
      *
-     * @param string $customerId Unique ID of the saved customer resource.
+     * @param string $customerId The `customer_id` you supplied when creating the customer.
      * @param CustomersUpdateRequest|array<string, mixed> $body Required request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
@@ -233,13 +184,7 @@ class Customers implements SumUpService
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('PUT', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer::class, [
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'PUT', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Customer::class, ['401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorForbidden::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'PUT', $path);
     }
 }

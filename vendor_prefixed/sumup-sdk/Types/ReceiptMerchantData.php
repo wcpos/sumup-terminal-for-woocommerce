@@ -1,11 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Receipt merchant data
+ * Merchant details displayed on a transaction receipt.
  */
 class ReceiptMerchantData
 {
@@ -15,12 +14,10 @@ class ReceiptMerchantData
      * @var ReceiptMerchantDataMerchantProfile|null
      */
     public ?ReceiptMerchantDataMerchantProfile $merchantProfile = null;
-
     /**
      * Locale used for rendering localized receipt fields.
      *
      * @var string|null
      */
     public ?string $locale = null;
-
 }

@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 class Timestamps
@@ -12,12 +11,10 @@ class Timestamps
      * @var string
      */
     public string $createdAt;
-
     /**
      * The date and time when the resource was last updated. This is a string as defined in [RFC 3339, section 5.6](https://datatracker.ietf.org/doc/html/rfc3339#section-5.6).
      *
      * @var string
      */
     public string $updatedAt;
-
 }

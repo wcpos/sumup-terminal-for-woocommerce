@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,47 +14,40 @@ class Card
      * @var string
      */
     public string $name;
-
     /**
      * Number of the payment card (without spaces).
      *
      * @var string
      */
     public string $number;
-
     /**
-     * Year from the expiration time of the payment card. Accepted formats are `YY` and `YYYY`.
+     * Two- or four-digit expiration year in `YY` or `YYYY` format.
      *
      * @var string
      */
     public string $expiryYear;
-
     /**
-     * Month from the expiration time of the payment card. Accepted format is `MM`.
+     * Two-digit expiration month, from `01` through `12`.
      *
-     * @var CardExpiryMonth
+     * @var string
      */
-    public CardExpiryMonth $expiryMonth;
-
+    public string $expiryMonth;
     /**
      * Three or four-digit card verification value (security code) of the payment card.
      *
      * @var string
      */
     public string $cvv;
-
     /**
      * Required five-digit ZIP code. Applicable only to merchant users in the USA.
      *
      * @var string|null
      */
     public ?string $zipCode = null;
-
     /**
      * Issuing card network of the payment card used for the transaction.
      *
      * @var CardType
      */
     public CardType $type;
-
 }

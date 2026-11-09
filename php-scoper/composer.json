@@ -4,7 +4,7 @@
   "type": "project",
   "require": {
     "humbug/php-scoper": "^0.18",
-    "sumup/sumup-php": "0.1.4"
+    "sumup/sumup-php": "0.1.9"
   },
   "config": {
     "platform": {

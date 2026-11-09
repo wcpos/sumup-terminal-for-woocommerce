@@ -1,11 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Error message structure.
+ * Details of an API error.
  */
 class Error
 {
@@ -15,12 +14,10 @@ class Error
      * @var string|null
      */
     public ?string $message = null;
-
     /**
      * Platform code for the error.
      *
      * @var string|null
      */
     public ?string $errorCode = null;
-
 }

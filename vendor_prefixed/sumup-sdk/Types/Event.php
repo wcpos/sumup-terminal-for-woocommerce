@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -10,26 +9,27 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 class Event
 {
     /**
-     * Unique ID of the transaction event.
+     * Numeric identifier of a transaction event. Use it as `tx_event_id` when requesting receipt details for a specific event. This is separate from the transaction ID and the transaction history pagination references.
      *
      * @var int|null
      */
     public ?int $id = null;
-
     /**
-     * Unique ID of the transaction.
+     * Unique identifier of the transaction.
      *
      * @var string|null
      */
     public ?string $transactionId = null;
-
     /**
-     * Type of the transaction event.
+     * Financial event associated with a transaction.
+     * - `PAYOUT`: Funds from the transaction being prepared for or included in a merchant payout. Check the event status to determine whether they have been paid out.
+     * - `REFUND`: Money returned to the payer.
+     * - `CHARGE_BACK`: A reversal of the payment following a chargeback.
+     * - `PAYOUT_DEDUCTION`: An amount deducted from a merchant payout, for example to cover a refund or chargeback.
      *
      * @var EventType|null
      */
     public ?EventType $type = null;
-
     /**
      * Status of the transaction event.
      * Not every value is used for every event type.
@@ -44,47 +44,40 @@ class Event
      * @var EventStatus|null
      */
     public ?EventStatus $status = null;
-
     /**
-     * Amount of the event.
+     * Amount associated with the transaction event, in major units.
      *
      * @var float|null
      */
     public ?float $amount = null;
-
     /**
-     * Date and time of the transaction event.
+     * The timestamp of when the transaction event occurred.
      *
      * @var string|null
      */
     public ?string $timestamp = null;
-
     /**
-     * Amount of the fee related to the event.
+     * Fee associated with the transaction event, in major units.
      *
      * @var float|null
      */
     public ?float $feeAmount = null;
-
     /**
-     * Consecutive number of the installment.
+     * Consecutive number of the installment associated with the event.
      *
      * @var int|null
      */
     public ?int $installmentNumber = null;
-
     /**
-     * Amount deducted for the event.
+     * Amount deducted from the merchant for the event, in major units.
      *
      * @var float|null
      */
     public ?float $deductedAmount = null;
-
     /**
-     * Amount of the fee deducted for the event.
+     * Fee deducted from the merchant for the event, in major units.
      *
      * @var float|null
      */
     public ?float $deductedFeeAmount = null;
-
 }

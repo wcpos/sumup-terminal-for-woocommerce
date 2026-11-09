@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Shared;
 
 /**
  * Three-letter [ISO4217](https://en.wikipedia.org/wiki/ISO_4217) code of the currency for the amount. Currently supported currency values are enumerated above.
  */
-enum TransactionBaseCurrency: string
+enum TransactionBaseCurrency : string
 {
     case BGN = 'BGN';
     case BRL = 'BRL';
@@ -25,11 +24,10 @@ enum TransactionBaseCurrency: string
     case SEK = 'SEK';
     case USD = 'USD';
 }
-
 /**
  * Payment type used for the transaction.
  */
-enum TransactionBasePaymentType: string
+enum TransactionBasePaymentType : string
 {
     case CASH = 'CASH';
     case POS = 'POS';
@@ -43,22 +41,20 @@ enum TransactionBasePaymentType: string
     case APM = 'APM';
     case UNKNOWN = 'UNKNOWN';
 }
-
 /**
  * Current status of the transaction.
  */
-enum TransactionBaseStatus: string
+enum TransactionBaseStatus : string
 {
     case SUCCESSFUL = 'SUCCESSFUL';
     case CANCELLED = 'CANCELLED';
     case FAILED = 'FAILED';
     case PENDING = 'PENDING';
 }
-
 /**
  * Entry mode of the payment details.
  */
-enum TransactionCheckoutInfoEntryMode: string
+enum TransactionCheckoutInfoEntryMode : string
 {
     case BOLETO = 'BOLETO';
     case SOFORT = 'SOFORT';
@@ -87,7 +83,6 @@ enum TransactionCheckoutInfoEntryMode: string
     case CONTACTLESS_MAGSTRIPE = 'CONTACTLESS_MAGSTRIPE';
     case N_A = 'N/A';
 }
-
 /**
  * Profile's personal address information.
  */
@@ -99,44 +94,37 @@ class AddressLegacy
      * @var string|null
      */
     public ?string $city = null;
-
     /**
      * Two letter country code formatted according to [ISO3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).
      *
      * @var string|null
      */
     public ?string $country = null;
-
     /**
      * First line of the address with details of the street name and number.
      *
      * @var string|null
      */
     public ?string $line1 = null;
-
     /**
      * Second line of the address with details of the building, unit, apartment, and floor numbers.
      *
      * @var string|null
      */
     public ?string $line2 = null;
-
     /**
      * Postal code from the address.
      *
      * @var string|null
      */
     public ?string $postalCode = null;
-
     /**
      * State name or abbreviation from the address.
      *
      * @var string|null
      */
     public ?string $state = null;
-
 }
-
 /**
  * Error message structure.
  */
@@ -148,16 +136,13 @@ class Error
      * @var string|null
      */
     public ?string $message = null;
-
     /**
      * Platform code for the error.
      *
      * @var string|null
      */
     public ?string $errorCode = null;
-
 }
-
 /**
  * Error message for forbidden requests.
  */
@@ -169,23 +154,19 @@ class ErrorForbidden
      * @var string|null
      */
     public ?string $errorMessage = null;
-
     /**
      * Platform code for the error.
      *
      * @var string|null
      */
     public ?string $errorCode = null;
-
     /**
      * HTTP status code for the error.
      *
      * @var string|null
      */
     public ?string $statusCode = null;
-
 }
-
 /**
  * Pending invitation for membership.
  */
@@ -197,15 +178,12 @@ class Invite
      * @var string
      */
     public string $email;
-
     /**
      *
      * @var string
      */
     public string $expiresAt;
-
 }
-
 /**
  * Created mandate
  */
@@ -217,23 +195,19 @@ class MandateResponse
      * @var string|null
      */
     public ?string $type = null;
-
     /**
      * Mandate status
      *
      * @var string|null
      */
     public ?string $status = null;
-
     /**
      * Merchant code which has the mandate
      *
      * @var string|null
      */
     public ?string $merchantCode = null;
-
 }
-
 /**
  * Personal details for the customer.
  */
@@ -245,51 +219,43 @@ class PersonalDetails
      * @var string|null
      */
     public ?string $firstName = null;
-
     /**
      * Last name of the customer.
      *
      * @var string|null
      */
     public ?string $lastName = null;
-
     /**
      * Email address of the customer.
      *
      * @var string|null
      */
     public ?string $email = null;
-
     /**
      * Phone number of the customer.
      *
      * @var string|null
      */
     public ?string $phone = null;
-
     /**
      * Date of birth of the customer.
      *
      * @var string|null
      */
     public ?string $birthDate = null;
-
     /**
      * An identification number user for tax purposes (e.g. CPF)
      *
      * @var string|null
      */
     public ?string $taxId = null;
-
     /**
      * Profile's personal address information.
      *
      * @var AddressLegacy|null
      */
     public ?AddressLegacy $address = null;
-
 }
-
 /**
  * A RFC 9457 problem details object.
  *
@@ -304,37 +270,31 @@ class Problem
      * @var string
      */
     public string $type;
-
     /**
      * A short, human-readable summary of the problem type.
      *
      * @var string|null
      */
     public ?string $title = null;
-
     /**
      * The HTTP status code generated by the origin server for this occurrence of the problem.
      *
      * @var int|null
      */
     public ?int $status = null;
-
     /**
      * A human-readable explanation specific to this occurrence of the problem.
      *
      * @var string|null
      */
     public ?string $detail = null;
-
     /**
      * A URI reference that identifies the specific occurrence of the problem.
      *
      * @var string|null
      */
     public ?string $instance = null;
-
 }
-
 /**
  * Details of the transaction.
  */
@@ -346,58 +306,49 @@ class TransactionBase
      * @var string|null
      */
     public ?string $id = null;
-
     /**
      * Transaction code returned by the acquirer/processing entity after processing the transaction.
      *
      * @var string|null
      */
     public ?string $transactionCode = null;
-
     /**
      * Total amount of the transaction.
      *
      * @var float|null
      */
     public ?float $amount = null;
-
     /**
      * Three-letter [ISO4217](https://en.wikipedia.org/wiki/ISO_4217) code of the currency for the amount. Currently supported currency values are enumerated above.
      *
      * @var TransactionBaseCurrency|null
      */
     public ?TransactionBaseCurrency $currency = null;
-
     /**
      * Date and time of the creation of the transaction. Response format expressed according to [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) code.
      *
      * @var string|null
      */
     public ?string $timestamp = null;
-
     /**
      * Current status of the transaction.
      *
      * @var TransactionBaseStatus|null
      */
     public ?TransactionBaseStatus $status = null;
-
     /**
      * Payment type used for the transaction.
      *
      * @var TransactionBasePaymentType|null
      */
     public ?TransactionBasePaymentType $paymentType = null;
-
     /**
      * Current number of the installment for deferred payments.
      *
      * @var int|null
      */
     public ?int $installmentsCount = null;
-
 }
-
 class TransactionCheckoutInfo
 {
     /**
@@ -406,40 +357,34 @@ class TransactionCheckoutInfo
      * @var string|null
      */
     public ?string $merchantCode = null;
-
     /**
      * Amount of the applicable VAT (out of the total transaction amount).
      *
      * @var float|null
      */
     public ?float $vatAmount = null;
-
     /**
      * Amount of the tip (out of the total transaction amount).
      *
      * @var float|null
      */
     public ?float $tipAmount = null;
-
     /**
      * Entry mode of the payment details.
      *
      * @var TransactionCheckoutInfoEntryMode|null
      */
     public ?TransactionCheckoutInfoEntryMode $entryMode = null;
-
     /**
      * Authorization code for the transaction sent by the payment card issuer or bank. Applicable only to card payments.
      *
      * @var string|null
      */
     public ?string $authCode = null;
-
     /**
      * Internal unique ID of the transaction on the SumUp platform.
      *
      * @var int|null
      */
     public ?int $internalId = null;
-
 }

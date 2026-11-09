@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -18,7 +17,7 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
  * - `CHARGEBACK`: The payment was subject to a chargeback.
  * - `NON_COLLECTION`: The amount could not be collected from the merchant after a chargeback or related adjustment.
  */
-enum TransactionFullSimpleStatus: string
+enum TransactionFullSimpleStatus : string
 {
     case SUCCESSFUL = 'SUCCESSFUL';
     case PAID_OUT = 'PAID_OUT';

@@ -1,15 +1,14 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * The card type of the card used for the transaction.
- * Is is required only for some countries (e.g: Brazil).
+ * It is required only for some countries (e.g: Brazil).
  *
  */
-enum CreateReaderCheckoutRequestCardType: string
+enum CreateReaderCheckoutRequestCardType : string
 {
     case CREDIT = 'credit';
     case DEBIT = 'debit';

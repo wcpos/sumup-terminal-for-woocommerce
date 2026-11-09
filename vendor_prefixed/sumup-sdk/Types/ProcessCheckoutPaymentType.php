@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Payment method used for this processing attempt. It determines which additional request fields are required.
  */
-enum ProcessCheckoutPaymentType: string
+enum ProcessCheckoutPaymentType : string
 {
     case CARD = 'card';
     case BOLETO = 'boleto';

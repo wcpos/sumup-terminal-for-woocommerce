@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Payout type.
  */
-enum TransactionHistoryPayoutType: string
+enum TransactionHistoryPayoutType : string
 {
     case BANK_ACCOUNT = 'BANK_ACCOUNT';
     case PREPAID_CARD = 'PREPAID_CARD';

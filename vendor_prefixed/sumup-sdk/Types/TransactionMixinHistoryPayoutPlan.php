@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Payout plan of the registered user at the time when the transaction was made.
  */
-enum TransactionMixinHistoryPayoutPlan: string
+enum TransactionMixinHistoryPayoutPlan : string
 {
     case SINGLE_PAYMENT = 'SINGLE_PAYMENT';
     case TRUE_INSTALLMENT = 'TRUE_INSTALLMENT';

@@ -19,7 +19,6 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Readers;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Receipts;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Roles;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\Transactions;
-
 /**
  * Class SumUp
  *
@@ -34,12 +33,10 @@ class SumUp
      * @var string|null
      */
     protected ?string $accessToken = null;
-
     /**
      * @var HttpClientInterface
      */
     protected HttpClientInterface $client;
-
     /**
      * SumUp constructor.
      *
@@ -59,18 +56,12 @@ class SumUp
         if (array_key_exists('client', $config)) {
             unset($config['client']);
         }
-
         $config = $this->normalizeConfig($config);
         if ($customHttpClient instanceof HttpClientInterface) {
             $this->client = $customHttpClient;
         } else {
-            $this->client = new CurlClient(
-                $config['base_uri'],
-                $config['custom_headers'],
-                $config['ca_bundle_path']
-            );
+            $this->client = new CurlClient($config['base_uri'], $config['custom_headers'], $config['ca_bundle_path']);
         }
-
         // Set access token from config (api_key or access_token)
         if (!empty($config['api_key'])) {
             $this->accessToken = $config['api_key'];
@@ -78,7 +69,6 @@ class SumUp
             $this->accessToken = $config['access_token'];
         }
     }
-
     /**
      * Returns the default access token.
      *
@@ -88,7 +78,6 @@ class SumUp
     {
         return $this->accessToken;
     }
-
     /**
      * Sets the default access token.
      *
@@ -100,7 +89,6 @@ class SumUp
     {
         $this->accessToken = $accessToken;
     }
-
     /**
      * Send a raw request through the configured HTTP client.
      *
@@ -111,17 +99,11 @@ class SumUp
      *
      * @return Response
      */
-    public function request(
-        string $method,
-        string $path,
-        array $body = [],
-        ?RequestOptions $requestOptions = null
-    ): Response {
+    public function request(string $method, string $path, array $body = [], ?RequestOptions $requestOptions = null): Response
+    {
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         return $this->client->send($method, $path, $body, $headers, $requestOptions);
     }
-
     /**
      * Resolve the access token that should be used for a service.
      *
@@ -136,14 +118,11 @@ class SumUp
         if (!empty($accessToken)) {
             return $accessToken;
         }
-
         if (empty($this->accessToken)) {
             throw new ConfigurationException('No access token provided');
         }
-
         return $this->accessToken;
     }
-
     /**
      * Normalize configuration and apply defaults.
      *
@@ -155,30 +134,19 @@ class SumUp
      */
     private function normalizeConfig(array $config): array
     {
-        $config = array_merge([
-            'api_key' => null,
-            'access_token' => null,
-            'base_uri' => 'https://api.sumup.com',
-            'custom_headers' => [],
-            'ca_bundle_path' => null,
-        ], $config);
-
+        $config = array_merge(['api_key' => null, 'access_token' => null, 'base_uri' => 'https://api.sumup.com', 'custom_headers' => [], 'ca_bundle_path' => null], $config);
         if ($config['api_key'] === null) {
             $config['api_key'] = getenv('SUMUP_API_KEY') ?: null;
         }
-
         if ($config['access_token'] === null) {
             $config['access_token'] = getenv('SUMUP_ACCESS_TOKEN') ?: null;
         }
-
         $headers = is_array($config['custom_headers']) ? $config['custom_headers'] : [];
         $headers['Accept'] = 'application/problem+json, application/json';
         $headers['User-Agent'] = SdkInfo::getUserAgent();
         $config['custom_headers'] = $headers;
-
         return $config;
     }
-
     /**
      * Access the Checkouts API endpoints.
      *
@@ -188,7 +156,6 @@ class SumUp
     {
         return new Checkouts($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Customers API endpoints.
      *
@@ -198,7 +165,6 @@ class SumUp
     {
         return new Customers($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Members API endpoints.
      *
@@ -208,7 +174,6 @@ class SumUp
     {
         return new Members($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Memberships API endpoints.
      *
@@ -218,7 +183,6 @@ class SumUp
     {
         return new Memberships($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Merchants API endpoints.
      *
@@ -228,7 +192,6 @@ class SumUp
     {
         return new Merchants($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Payouts API endpoints.
      *
@@ -238,7 +201,6 @@ class SumUp
     {
         return new Payouts($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Readers API endpoints.
      *
@@ -248,7 +210,6 @@ class SumUp
     {
         return new Readers($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Receipts API endpoints.
      *
@@ -258,7 +219,6 @@ class SumUp
     {
         return new Receipts($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Roles API endpoints.
      *
@@ -268,7 +228,6 @@ class SumUp
     {
         return new Roles($this->client, $this->resolveAccessToken());
     }
-
     /**
      * Access the Transactions API endpoints.
      *

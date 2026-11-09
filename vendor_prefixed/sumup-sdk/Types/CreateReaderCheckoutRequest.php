@@ -1,11 +1,11 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Reader Checkout
+ * Payment details for a Reader Checkout.
+ *
  */
 class CreateReaderCheckoutRequest
 {
@@ -16,41 +16,44 @@ class CreateReaderCheckoutRequest
      * @var CreateReaderCheckoutRequestAade|null
      */
     public ?CreateReaderCheckoutRequestAade $aade = null;
-
     /**
-     * Affiliate metadata for the transaction.
-     * It is a field that allow for integrators to track the source of the transaction.
+     * Optional affiliate metadata associated with the checkout's payment.
+     * Provide both `app_id` and `key` when including this object.
      *
      * @var CreateReaderCheckoutRequestAffiliate|null
      */
     public ?CreateReaderCheckoutRequestAffiliate $affiliate = null;
-
     /**
      * The card type of the card used for the transaction.
-     * Is is required only for some countries (e.g: Brazil).
+     * It is required only for some countries (e.g: Brazil).
      *
      * @var CreateReaderCheckoutRequestCardType|null
      */
     public ?CreateReaderCheckoutRequestCardType $cardType = null;
-
     /**
      * Description of the checkout to be shown in the Merchant Sales
      *
      * @var string|null
      */
     public ?string $description = null;
-
     /**
      * Number of installments for the transaction.
      * It may vary according to the merchant country.
      * For example, in Brazil, the maximum number of installments is 12.
-     * Omit if the merchant country does support installments.
+     * Omit if the merchant country does not support installments.
      * Otherwise, the checkout will be rejected.
      *
      * @var int|null
      */
     public ?int $installments = null;
-
+    /**
+     * The payment method type for the transaction. Defaults to `card`.
+     * Use `pix` to initiate a Pix QR-code payment flow on the device.
+     * Pix is only supported for Brazilian merchants; other merchants will receive a 422 error.
+     *
+     * @var CreateReaderCheckoutRequestPaymentType|null
+     */
+    public ?CreateReaderCheckoutRequestPaymentType $paymentType = null;
     /**
      * Webhook URL to which the payment result will be sent.
      * It must be a HTTPS url.
@@ -58,16 +61,14 @@ class CreateReaderCheckoutRequest
      * @var string|null
      */
     public ?string $returnUrl = null;
-
     /**
-     * List of tipping rates to be displayed to the cardholder.
-     * The rates are in percentage and should be between 0.01 and 0.99.
-     * The list should be sorted in ascending order.
+     * Exactly three distinct tipping rates to be displayed to the cardholder.
+     * Each rate is a fraction between 0.01 and 1.00 in increments of 0.01.
+     * The rates are sorted in ascending order by the server.
      *
      * @var float[]|null
      */
     public ?array $tipRates = null;
-
     /**
      * Time in seconds the cardholder has to select a tip rate.
      * If not provided, the default value is 30 seconds.
@@ -77,7 +78,6 @@ class CreateReaderCheckoutRequest
      * @var int|null
      */
     public ?int $tipTimeout = null;
-
     /**
      * Amount structure.
      * The amount is represented as an integer value altogether with the currency and the minor unit.
@@ -86,7 +86,6 @@ class CreateReaderCheckoutRequest
      * @var CreateReaderCheckoutRequestTotalAmount
      */
     public CreateReaderCheckoutRequestTotalAmount $totalAmount;
-
     /**
      * Create request DTO.
      *
@@ -96,34 +95,15 @@ class CreateReaderCheckoutRequest
      * @param CreateReaderCheckoutRequestCardType|string|null $cardType
      * @param string|null $description
      * @param int|null $installments
+     * @param CreateReaderCheckoutRequestPaymentType|string|null $paymentType
      * @param string|null $returnUrl
      * @param float[]|null $tipRates
      * @param int|null $tipTimeout
      */
-    public function __construct(
-        CreateReaderCheckoutRequestTotalAmount $totalAmount,
-        ?CreateReaderCheckoutRequestAade $aade = null,
-        ?CreateReaderCheckoutRequestAffiliate $affiliate = null,
-        CreateReaderCheckoutRequestCardType|string|null $cardType = null,
-        ?string $description = null,
-        ?int $installments = null,
-        ?string $returnUrl = null,
-        ?array $tipRates = null,
-        ?int $tipTimeout = null
-    ) {
-        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
-            'total_amount' => $totalAmount,
-            'aade' => $aade,
-            'affiliate' => $affiliate,
-            'card_type' => $cardType,
-            'description' => $description,
-            'installments' => $installments,
-            'return_url' => $returnUrl,
-            'tip_rates' => $tipRates,
-            'tip_timeout' => $tipTimeout,
-        ], self::class, $this);
+    public function __construct(CreateReaderCheckoutRequestTotalAmount $totalAmount, ?CreateReaderCheckoutRequestAade $aade = null, ?CreateReaderCheckoutRequestAffiliate $affiliate = null, CreateReaderCheckoutRequestCardType|string|null $cardType = null, ?string $description = null, ?int $installments = null, CreateReaderCheckoutRequestPaymentType|string|null $paymentType = null, ?string $returnUrl = null, ?array $tipRates = null, ?int $tipTimeout = null)
+    {
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate(['total_amount' => $totalAmount, 'aade' => $aade, 'affiliate' => $affiliate, 'card_type' => $cardType, 'description' => $description, 'installments' => $installments, 'payment_type' => $paymentType, 'return_url' => $returnUrl, 'tip_rates' => $tipRates, 'tip_timeout' => $tipTimeout], self::class, $this);
     }
-
     /**
      * Create request DTO from an associative array.
      *
@@ -131,16 +111,11 @@ class CreateReaderCheckoutRequest
      */
     public static function fromArray(array $data): self
     {
-        self::assertRequiredFields($data, [
-            'total_amount' => 'totalAmount',
-        ]);
-
+        self::assertRequiredFields($data, ['total_amount' => 'totalAmount']);
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
-
         return $request;
     }
-
     /**
      * @param array<string, mixed> $data
      * @param array<string, string> $requiredFields
@@ -153,5 +128,4 @@ class CreateReaderCheckoutRequest
             }
         }
     }
-
 }

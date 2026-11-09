@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -14,7 +13,7 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
  * - `paired` - The reader is paired with a merchant account and can be used with SumUp APIs.
  * - `expired` - The pairing is expired and no longer usable with the account. The resource needs to get recreated.
  */
-enum ReaderStatus: string
+enum ReaderStatus : string
 {
     case UNKNOWN = 'unknown';
     case PROCESSING = 'processing';

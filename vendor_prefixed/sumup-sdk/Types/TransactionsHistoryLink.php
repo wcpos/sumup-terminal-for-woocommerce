@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -10,17 +9,15 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 class TransactionsHistoryLink
 {
     /**
-     * Relation.
+     * Pagination relation indicating which page the link retrieves, for example `next`.
      *
      * @var string
      */
     public string $rel;
-
     /**
-     * Location.
+     * Query string to use with the transaction history endpoint when requesting the linked page. Preserve the returned pagination references and query parameters.
      *
      * @var string
      */
     public string $href;
-
 }

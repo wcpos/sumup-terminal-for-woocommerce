@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Verification method used for the transaction.
  */
-enum TransactionFullVerificationMethod: string
+enum TransactionFullVerificationMethod : string
 {
     case NONE = 'none';
     case SIGNATURE = 'signature';
