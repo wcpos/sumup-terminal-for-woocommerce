@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 class CompanyIdentifier
@@ -12,12 +11,10 @@ class CompanyIdentifier
      * @var string
      */
     public string $ref;
-
     /**
      * The company identifier value.
      *
      * @var string
      */
     public string $value;
-
 }

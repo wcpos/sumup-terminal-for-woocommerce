@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -10,17 +9,15 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 class ReceiptCard
 {
     /**
-     * Card last 4 digits.
+     * Last four digits of the payment card number.
      *
      * @var string|null
      */
     public ?string $last4Digits = null;
-
     /**
-     * Card Scheme.
+     * Issuing card network of the payment card.
      *
      * @var string|null
      */
     public ?string $type = null;
-
 }

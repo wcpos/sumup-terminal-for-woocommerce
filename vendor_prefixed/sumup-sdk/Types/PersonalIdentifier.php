@@ -1,23 +1,20 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 class PersonalIdentifier
 {
     /**
-     * The unique reference for the personal identifier type as defined in the country SDK.
+     * The unique reference for the personal identifier type.
      *
      * @var string
      */
     public string $ref;
-
     /**
-     * The company identifier value.
+     * The personal identifier value.
      *
      * @var string
      */
     public string $value;
-
 }

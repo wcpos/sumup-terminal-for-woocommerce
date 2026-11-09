@@ -1,11 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Purchase product.
+ * Product details associated with a transaction.
  */
 class Product
 {
@@ -15,68 +14,58 @@ class Product
      * @var string|null
      */
     public ?string $name = null;
-
     /**
-     * Product description.
+     * Human-readable label for the product price.
      *
      * @var string|null
      */
     public ?string $priceLabel = null;
-
     /**
      * Product price.
      *
      * @var float|null
      */
     public ?float $price = null;
-
     /**
-     * VAT percentage.
+     * VAT rate as a decimal fraction, for example `0.19` for 19%.
      *
      * @var float|null
      */
     public ?float $vatRate = null;
-
     /**
      * VAT amount for a single product.
      *
      * @var float|null
      */
     public ?float $singleVatAmount = null;
-
     /**
-     * Product price incl. VAT.
+     * Product price including VAT.
      *
      * @var float|null
      */
     public ?float $priceWithVat = null;
-
     /**
-     * VAT amount.
+     * Total VAT amount for the product quantity.
      *
      * @var float|null
      */
     public ?float $vatAmount = null;
-
     /**
      * Product quantity.
      *
      * @var int|null
      */
     public ?int $quantity = null;
-
     /**
-     * Quantity x product price.
+     * Total price calculated as the product price multiplied by the quantity.
      *
      * @var float|null
      */
     public ?float $totalPrice = null;
-
     /**
-     * Total price incl. VAT.
+     * Total product price including VAT.
      *
      * @var float|null
      */
     public ?float $totalWithVat = null;
-
 }

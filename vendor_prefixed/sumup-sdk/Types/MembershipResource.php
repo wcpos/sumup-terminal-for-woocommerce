@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,7 +14,6 @@ class MembershipResource
      * @var string
      */
     public string $id;
-
     /**
      * The type of the membership resource.
      * Possible values are:
@@ -25,40 +23,34 @@ class MembershipResource
      * @var string
      */
     public string $type;
-
     /**
      * Display name of the resource.
      *
      * @var string
      */
     public string $name;
-
     /**
      * Logo fo the resource.
      *
      * @var string|null
      */
     public ?string $logo = null;
-
     /**
      * The timestamp of when the membership resource was created.
      *
      * @var string
      */
     public string $createdAt;
-
     /**
      * The timestamp of when the membership resource was last updated.
      *
      * @var string
      */
     public string $updatedAt;
-
     /**
      * Object attributes that are modifiable only by SumUp applications.
      *
      * @var array<string, mixed>|null
      */
     public ?array $attributes = null;
-
 }

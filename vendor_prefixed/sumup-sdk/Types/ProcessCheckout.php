@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,63 +14,54 @@ class ProcessCheckout
      * @var ProcessCheckoutPaymentType
      */
     public ProcessCheckoutPaymentType $paymentType;
-
     /**
      * Number of installments for deferred payments. Available only to merchant users in Brazil.
      *
      * @var int|null
      */
     public ?int $installments = null;
-
     /**
      * Mandate details used when a checkout should create a reusable card token for future recurring or merchant-initiated payments.
      *
      * @var MandatePayload|null
      */
     public ?MandatePayload $mandate = null;
-
     /**
      * __Required when payment type is `card`.__ Details of the payment card.
      *
      * @var Card|null
      */
     public ?Card $card = null;
-
     /**
      * Raw `PaymentData` object received from Google Pay. Send the Google Pay response payload as-is.
      *
      * @var array<string, mixed>|null
      */
     public ?array $googlePay = null;
-
     /**
      * Raw payment token object received from Apple Pay. Send the Apple Pay response payload as-is.
      *
      * @var array<string, mixed>|null
      */
     public ?array $applePay = null;
-
     /**
-     * Saved-card token to use instead of raw card details when processing with a previously stored payment instrument.
+     * Token of a saved payment instrument returned by checkout processing or the customer's payment-instruments endpoint. To charge a saved card, set `payment_type` to `card` and provide both this `token` and the associated `customer_id` instead of raw card details.
      *
      * @var string|null
      */
     public ?string $token = null;
-
     /**
      * Customer identifier associated with the saved payment instrument. Required when `token` is provided.
      *
      * @var string|null
      */
     public ?string $customerId = null;
-
     /**
      * Personal details for the customer.
      *
      * @var PersonalDetails|null
      */
     public ?PersonalDetails $personalDetails = null;
-
     /**
      * Create request DTO.
      *
@@ -85,30 +75,10 @@ class ProcessCheckout
      * @param string|null $customerId
      * @param PersonalDetails|null $personalDetails
      */
-    public function __construct(
-        ProcessCheckoutPaymentType|string $paymentType,
-        ?int $installments = null,
-        ?MandatePayload $mandate = null,
-        ?Card $card = null,
-        ?array $googlePay = null,
-        ?array $applePay = null,
-        ?string $token = null,
-        ?string $customerId = null,
-        ?PersonalDetails $personalDetails = null
-    ) {
-        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
-            'payment_type' => $paymentType,
-            'installments' => $installments,
-            'mandate' => $mandate,
-            'card' => $card,
-            'google_pay' => $googlePay,
-            'apple_pay' => $applePay,
-            'token' => $token,
-            'customer_id' => $customerId,
-            'personal_details' => $personalDetails,
-        ], self::class, $this);
+    public function __construct(ProcessCheckoutPaymentType|string $paymentType, ?int $installments = null, ?MandatePayload $mandate = null, ?Card $card = null, ?array $googlePay = null, ?array $applePay = null, ?string $token = null, ?string $customerId = null, ?PersonalDetails $personalDetails = null)
+    {
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate(['payment_type' => $paymentType, 'installments' => $installments, 'mandate' => $mandate, 'card' => $card, 'google_pay' => $googlePay, 'apple_pay' => $applePay, 'token' => $token, 'customer_id' => $customerId, 'personal_details' => $personalDetails], self::class, $this);
     }
-
     /**
      * Create request DTO from an associative array.
      *
@@ -116,16 +86,11 @@ class ProcessCheckout
      */
     public static function fromArray(array $data): self
     {
-        self::assertRequiredFields($data, [
-            'payment_type' => 'paymentType',
-        ]);
-
+        self::assertRequiredFields($data, ['payment_type' => 'paymentType']);
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
-
         return $request;
     }
-
     /**
      * @param array<string, mixed> $data
      * @param array<string, string> $requiredFields
@@ -138,5 +103,4 @@ class ProcessCheckout
             }
         }
     }
-
 }

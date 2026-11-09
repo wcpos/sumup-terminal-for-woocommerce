@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Transactions;
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
@@ -11,32 +10,26 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestH
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
-
 /**
  * Optional amount for partial refunds of transactions.
  */
 class TransactionsRefundRequest
 {
     /**
-     * Amount to be refunded. Eligible amount can't exceed the amount of the transaction and varies based on country and currency. If you do not specify a value, the system performs a full refund of the transaction.
+     * Amount to refund in major units of the transaction's currency, for example `5` for EUR 5.00. It must be greater than zero and cannot exceed the amount eligible for a refund. Eligibility depends on the transaction and country/currency rules. If omitted, the system requests a full refund.
      *
      * @var float|null
      */
     public ?float $amount = null;
-
     /**
      * Create request DTO.
      *
      * @param float|null $amount
      */
-    public function __construct(
-        ?float $amount = null
-    ) {
-        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
-            'amount' => $amount,
-        ], self::class, $this);
+    public function __construct(?float $amount = null)
+    {
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate(['amount' => $amount], self::class, $this);
     }
-
     /**
      * Create request DTO from an associative array.
      *
@@ -46,28 +39,24 @@ class TransactionsRefundRequest
     {
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
-
         return $request;
     }
-
 }
-
 class TransactionsListResponse
 {
     /**
+     * Transactions in the current result page.
      *
      * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionHistory[]|null
      */
     public ?array $items = null;
-
     /**
+     * Pagination links for navigating the transaction history.
      *
      * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionsHistoryLink[]|null
      */
     public ?array $links = null;
-
 }
-
 /**
  * Query parameters for TransactionsGetParams.
  *
@@ -81,30 +70,25 @@ class TransactionsGetParams
      * @var string|null
      */
     public ?string $id = null;
-
     /**
      * Retrieves the transaction resource with the specified transaction code.
      *
      * @var string|null
      */
     public ?string $transactionCode = null;
-
     /**
-     * External/foreign transaction id (passed by clients).
+     * External transaction identifier supplied by the client.
      *
      * @var string|null
      */
     public ?string $foreignTransactionId = null;
-
     /**
-     * Client transaction id.
+     * Client-supplied identifier of the transaction.
      *
      * @var string|null
      */
     public ?string $clientTransactionId = null;
-
 }
-
 /**
  * Query parameters for TransactionsListParams.
  *
@@ -118,93 +102,79 @@ class TransactionsListParams
      * @var string|null
      */
     public ?string $transactionCode = null;
-
     /**
-     * Specifies the order in which the returned results are displayed.
+     * Sort direction for the transaction history. Use `ascending` or `descending`; the default is `ascending`.
      *
      * @var string|null
      */
     public ?string $order = null;
-
     /**
-     * Specifies the maximum number of results per page. Value must be a positive integer and if not specified, will return 10 results.
+     * Maximum number of transactions per page. Must be a positive integer. Defaults to `10` when omitted; a page can contain fewer results.
      *
      * @var int|null
      */
     public ?int $limit = null;
-
     /**
-     * Filters the returned results by user email.
+     * Filters transactions by user email. For multiple values, repeat the query parameter, for example `users[]=first@example.com&users[]=second@example.com`.
      *
      * @var string[]|null
      */
-    public ?array $users = null;
-
+    public ?array $usersList = null;
     /**
-     * Filters the returned results by the specified list of final statuses of the transactions.
+     * Filters transactions by the listed final statuses. For multiple values, repeat the query parameter, for example `statuses[]=SUCCESSFUL&statuses[]=REFUNDED`.
      *
      * @var string[]|null
      */
     public ?array $statusesList = null;
-
     /**
      * Filters the returned results by the specified list of payment types used for the transactions.
      *
      * @var string[]|null
      */
-    public ?array $paymentTypes = null;
-
+    public ?array $paymentTypesList = null;
     /**
      * Filters the returned results by the specified list of entry modes.
      *
      * @var string[]|null
      */
     public ?array $entryModesList = null;
-
     /**
      * Filters the returned results by the specified list of transaction types.
      *
      * @var string[]|null
      */
-    public ?array $types = null;
-
+    public ?array $typesList = null;
     /**
      * Filters the results by the latest modification time of resources and returns only transactions that are modified *at or after* the specified timestamp (in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) format).
      *
      * @var string|null
      */
     public ?string $changesSince = null;
-
     /**
      * Filters the results by the creation time of resources and returns only transactions that are created *before* the specified timestamp (in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) format).
      *
      * @var string|null
      */
     public ?string $newestTime = null;
-
     /**
-     * Filters the results by the reference ID of transaction events and returns only transactions with events whose IDs are *smaller* than the specified value. This parameters supersedes the `newest_time` parameter (if both are provided in the request).
+     * Pagination reference that returns results before the specified reference. Use the value from a returned pagination link rather than constructing it yourself. This parameter takes precedence over `newest_time` when both are provided.
      *
      * @var string|null
      */
     public ?string $newestRef = null;
-
     /**
      * Filters the results by the creation time of resources and returns only transactions that are created *at or after* the specified timestamp (in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) format).
      *
      * @var string|null
      */
     public ?string $oldestTime = null;
-
     /**
-     * Filters the results by the reference ID of transaction events and returns only transactions with events whose IDs are *greater* than the specified value. This parameters supersedes the `oldest_time` parameter (if both are provided in the request).
+     * Pagination reference that returns results after the specified reference. Use the value from a returned pagination link rather than constructing it yourself. This parameter takes precedence over `oldest_time` when both are provided.
      *
      * @var string|null
      */
     public ?string $oldestRef = null;
-
 }
-
 /**
  * Class Transactions
  *
@@ -237,14 +207,12 @@ class Transactions implements SumUpService
      * @var HttpClientInterface
      */
     protected HttpClientInterface $client;
-
     /**
      * The access token needed for authentication for the services.
      *
      * @var string
      */
     protected string $accessToken;
-
     /**
      * Transactions constructor.
      *
@@ -256,11 +224,10 @@ class Transactions implements SumUpService
         $this->client = $client;
         $this->accessToken = $accessToken;
     }
-
     /**
      * Retrieve a transaction
      *
-     * @param string $merchantCode Merchant code of the account whose transaction should be retrieved.
+     * @param string $merchantCode Short unique identifier for the merchant.
      * @param TransactionsGetParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
@@ -296,19 +263,13 @@ class Transactions implements SumUpService
         }
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionFull::class, [
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\TransactionFull::class, ['401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'GET', $path);
     }
-
     /**
      * List transactions
      *
-     * @param string $merchantCode Merchant code of the account whose transaction history should be listed.
+     * @param string $merchantCode Short unique identifier for the merchant.
      * @param TransactionsListParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
@@ -332,20 +293,20 @@ class Transactions implements SumUpService
             if (isset($queryParams->limit)) {
                 $queryParamsData['limit'] = $queryParams->limit;
             }
-            if (isset($queryParams->users)) {
-                $queryParamsData['users'] = $queryParams->users;
+            if (isset($queryParams->usersList)) {
+                $queryParamsData['users[]'] = $queryParams->usersList;
             }
             if (isset($queryParams->statusesList)) {
                 $queryParamsData['statuses[]'] = $queryParams->statusesList;
             }
-            if (isset($queryParams->paymentTypes)) {
-                $queryParamsData['payment_types'] = $queryParams->paymentTypes;
+            if (isset($queryParams->paymentTypesList)) {
+                $queryParamsData['payment_types[]'] = $queryParams->paymentTypesList;
             }
             if (isset($queryParams->entryModesList)) {
                 $queryParamsData['entry_modes[]'] = $queryParams->entryModesList;
             }
-            if (isset($queryParams->types)) {
-                $queryParamsData['types'] = $queryParams->types;
+            if (isset($queryParams->typesList)) {
+                $queryParamsData['types[]'] = $queryParams->typesList;
             }
             if (isset($queryParams->changesSince)) {
                 $queryParamsData['changes_since'] = $queryParams->changesSince;
@@ -371,32 +332,26 @@ class Transactions implements SumUpService
         }
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\TransactionsListResponse::class, [
-            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\TransactionsListResponse::class, ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class], '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'GET', $path);
     }
-
     /**
      * Refund a transaction
      *
-     * @param string $merchantCode Merchant code of the account that owns the payment to refund.
-     * @param string $id Unique ID of the transaction.
+     * @param string $merchantCode Short unique identifier for the merchant.
+     * @param string $transactionId Unique identifier of the transaction.
      * @param TransactionsRefundRequest|array<string, mixed>|null $body Optional request payload
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
-     * @return null
+     * @return array<string, mixed>
      * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException
      * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException
      * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
      * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function refund(string $merchantCode, string $id, TransactionsRefundRequest|array|null $body = null, ?RequestOptions $requestOptions = null): null
+    public function refund(string $merchantCode, string $transactionId, TransactionsRefundRequest|array|null $body = null, ?RequestOptions $requestOptions = null): array
     {
-        $path = sprintf('/v1.0/merchants/%s/payments/%s/refunds', rawurlencode((string) $merchantCode), rawurlencode((string) $id));
+        $path = sprintf('/v1.0/merchants/%s/payments/%s/refunds', rawurlencode((string) $merchantCode), rawurlencode((string) $transactionId));
         $payload = [];
         if ($body !== null) {
             $requestBody = $body;
@@ -406,14 +361,7 @@ class Transactions implements SumUpService
             $payload = RequestEncoder::encode($requestBody);
         }
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '204' => ['type' => 'void'],
-        ], [
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-            '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'POST', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['201' => ['type' => 'object']], ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '403' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '409' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '422' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'POST', $path);
     }
 }

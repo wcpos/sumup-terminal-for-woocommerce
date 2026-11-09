@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Latest state of the device
  */
-enum StatusResponseDataState: string
+enum StatusResponseDataState : string
 {
     case IDLE = 'IDLE';
     case SELECTING_TIP = 'SELECTING_TIP';

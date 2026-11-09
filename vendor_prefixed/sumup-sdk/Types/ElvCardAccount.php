@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,26 +14,22 @@ class ElvCardAccount
      * @var string|null
      */
     public ?string $sortCode = null;
-
     /**
      * ELV card account number last 4 digits.
      *
      * @var string|null
      */
     public ?string $last4Digits = null;
-
     /**
      * ELV card sequence number.
      *
      * @var int|null
      */
     public ?int $sequenceNo = null;
-
     /**
      * ELV IBAN.
      *
      * @var string|null
      */
     public ?string $iban = null;
-
 }

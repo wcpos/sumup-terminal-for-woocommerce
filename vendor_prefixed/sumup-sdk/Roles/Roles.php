@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Roles;
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
@@ -11,7 +10,6 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestH
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\RequestEncoder;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
-
 class RolesCreateRequest
 {
     /**
@@ -20,28 +18,24 @@ class RolesCreateRequest
      * @var string
      */
     public string $name;
-
     /**
      * User's permissions.
      *
      * @var string[]
      */
     public array $permissions;
-
     /**
      * Set of user-defined key-value pairs attached to the object. Partial updates are not supported. When updating, always submit whole metadata. Maximum of 64 parameters are allowed in the object.
      *
      * @var array<string, mixed>|null
      */
     public ?array $metadata = null;
-
     /**
      * User-defined description of the role.
      *
      * @var string|null
      */
     public ?string $description = null;
-
     /**
      * Create request DTO.
      *
@@ -50,20 +44,10 @@ class RolesCreateRequest
      * @param array<string, mixed>|null $metadata
      * @param string|null $description
      */
-    public function __construct(
-        string $name,
-        array $permissions,
-        ?array $metadata = null,
-        ?string $description = null
-    ) {
-        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
-            'name' => $name,
-            'permissions' => $permissions,
-            'metadata' => $metadata,
-            'description' => $description,
-        ], self::class, $this);
+    public function __construct(string $name, array $permissions, ?array $metadata = null, ?string $description = null)
+    {
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate(['name' => $name, 'permissions' => $permissions, 'metadata' => $metadata, 'description' => $description], self::class, $this);
     }
-
     /**
      * Create request DTO from an associative array.
      *
@@ -71,17 +55,11 @@ class RolesCreateRequest
      */
     public static function fromArray(array $data): self
     {
-        self::assertRequiredFields($data, [
-            'name' => 'name',
-            'permissions' => 'permissions',
-        ]);
-
+        self::assertRequiredFields($data, ['name' => 'name', 'permissions' => 'permissions']);
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
-
         return $request;
     }
-
     /**
      * @param array<string, mixed> $data
      * @param array<string, string> $requiredFields
@@ -94,9 +72,7 @@ class RolesCreateRequest
             }
         }
     }
-
 }
-
 class RolesUpdateRequest
 {
     /**
@@ -105,21 +81,18 @@ class RolesUpdateRequest
      * @var string|null
      */
     public ?string $name = null;
-
     /**
      * User's permissions.
      *
      * @var string[]|null
      */
     public ?array $permissions = null;
-
     /**
      * User-defined description of the role.
      *
      * @var string|null
      */
     public ?string $description = null;
-
     /**
      * Create request DTO.
      *
@@ -127,18 +100,10 @@ class RolesUpdateRequest
      * @param string[]|null $permissions
      * @param string|null $description
      */
-    public function __construct(
-        ?string $name = null,
-        ?array $permissions = null,
-        ?string $description = null
-    ) {
-        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate([
-            'name' => $name,
-            'permissions' => $permissions,
-            'description' => $description,
-        ], self::class, $this);
+    public function __construct(?string $name = null, ?array $permissions = null, ?string $description = null)
+    {
+        \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate(['name' => $name, 'permissions' => $permissions, 'description' => $description], self::class, $this);
     }
-
     /**
      * Create request DTO from an associative array.
      *
@@ -148,12 +113,9 @@ class RolesUpdateRequest
     {
         $request = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Hydrator::hydrate($data, self::class, $request);
-
         return $request;
     }
-
 }
-
 class RolesListResponse
 {
     /**
@@ -161,9 +123,7 @@ class RolesListResponse
      * @var \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role[]
      */
     public array $items;
-
 }
-
 /**
  * Class Roles
  *
@@ -179,14 +139,12 @@ class Roles implements SumUpService
      * @var HttpClientInterface
      */
     protected HttpClientInterface $client;
-
     /**
      * The access token needed for authentication for the services.
      *
      * @var string
      */
     protected string $accessToken;
-
     /**
      * Roles constructor.
      *
@@ -198,7 +156,6 @@ class Roles implements SumUpService
         $this->client = $client;
         $this->accessToken = $accessToken;
     }
-
     /**
      * Create a role
      *
@@ -222,17 +179,9 @@ class Roles implements SumUpService
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('POST', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role::class],
-        ], [
-            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'POST', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['201' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role::class]], ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'POST', $path);
     }
-
     /**
      * Delete a role
      *
@@ -251,17 +200,9 @@ class Roles implements SumUpService
         $path = sprintf('/v0.1/merchants/%s/roles/%s', rawurlencode((string) $merchantCode), rawurlencode((string) $roleId));
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('DELETE', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '200' => ['type' => 'void'],
-        ], [
-            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'DELETE', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['200' => ['type' => 'void']], ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'DELETE', $path);
     }
-
     /**
      * Retrieve a role
      *
@@ -280,14 +221,9 @@ class Roles implements SumUpService
         $path = sprintf('/v0.1/merchants/%s/roles/%s', rawurlencode((string) $merchantCode), rawurlencode((string) $roleId));
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role::class, [
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role::class, ['404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'GET', $path);
     }
-
     /**
      * List roles
      *
@@ -305,14 +241,9 @@ class Roles implements SumUpService
         $path = sprintf('/v0.1/merchants/%s/roles', rawurlencode((string) $merchantCode));
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\RolesListResponse::class, [
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services\RolesListResponse::class, ['404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'GET', $path);
     }
-
     /**
      * Update a role
      *
@@ -337,12 +268,7 @@ class Roles implements SumUpService
         }
         $payload = RequestEncoder::encode($requestBody);
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('PATCH', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role::class, [
-            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'PATCH', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Role::class, ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'PATCH', $path);
     }
 }

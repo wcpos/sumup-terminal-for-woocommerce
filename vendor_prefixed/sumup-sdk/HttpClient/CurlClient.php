@@ -5,7 +5,6 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConfigurationException;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException;
-
 /**
  * Class CurlClient
  *
@@ -19,21 +18,18 @@ class CurlClient implements HttpClientInterface
      * @var string
      */
     private string $baseUrl;
-
     /**
      * Custom headers for every request.
      *
      * @var array<string, string>
      */
     private array $customHeaders;
-
     /**
      * The CA bundle path used to verify HTTPS calls.
      *
      * @var string|null
      */
     private $caBundlePath;
-
     /**
      * CurlClient constructor.
      *
@@ -50,7 +46,6 @@ class CurlClient implements HttpClientInterface
             $this->caBundlePath = $this->getDefaultCABundlePath();
         }
     }
-
     /**
      * @param string $method      The request method.
      * @param string $url         The endpoint to send the request to.
@@ -68,53 +63,41 @@ class CurlClient implements HttpClientInterface
         if ($method === '') {
             throw new SDKException('Request method cannot be empty.');
         }
-
         $requestUrl = $this->baseUrl . $url;
         if ($requestUrl === '') {
             throw new SDKException('Request URL cannot be empty.');
         }
-
         $reqHeaders = array_merge($headers, $this->customHeaders);
-        $retries = $options !== null ? ($options->retries ?? 0) : 0;
-        $backoffMs = $options !== null ? ($options->retryBackoffMs ?? 0) : 0;
-
+        $retries = $options !== null ? $options->retries ?? 0 : 0;
+        $backoffMs = $options !== null ? $options->retryBackoffMs ?? 0 : 0;
         $attempt = 0;
         do {
             $ch = curl_init();
-            if ($ch === false) {
-                throw new ConnectionException('Failed to initialize cURL handle.', 0);
-            }
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-            curl_setopt($ch, CURLOPT_URL, $requestUrl);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $this->formatHeaders($reqHeaders));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HEADER, true);
+            curl_setopt($ch, \CURLOPT_CUSTOMREQUEST, $method);
+            curl_setopt($ch, \CURLOPT_URL, $requestUrl);
+            curl_setopt($ch, \CURLOPT_HTTPHEADER, $this->formatHeaders($reqHeaders));
+            curl_setopt($ch, \CURLOPT_RETURNTRANSFER, \true);
+            curl_setopt($ch, \CURLOPT_HEADER, \true);
             if (!empty($body)) {
                 $payload = json_encode($body);
                 if (!is_string($payload)) {
                     throw new SDKException('Failed to encode request body to JSON.');
                 }
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                curl_setopt($ch, \CURLOPT_POSTFIELDS, $payload);
             }
-
             if (!empty($this->caBundlePath)) {
-                curl_setopt($ch, CURLOPT_CAINFO, $this->caBundlePath);
+                curl_setopt($ch, \CURLOPT_CAINFO, $this->caBundlePath);
             }
-
             if ($options?->timeout !== null) {
-                curl_setopt($ch, CURLOPT_TIMEOUT, $options->timeout);
+                curl_setopt($ch, \CURLOPT_TIMEOUT, $options->timeout);
             }
-
             if ($options?->connectTimeout !== null) {
-                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $options->connectTimeout);
+                curl_setopt($ch, \CURLOPT_CONNECTTIMEOUT, $options->connectTimeout);
             }
-
             $response = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
+            $code = curl_getinfo($ch, \CURLINFO_HTTP_CODE);
             $error = curl_error($ch);
             if ($error) {
-                $this->closeHandle($ch);
                 if ($attempt < $retries) {
                     $this->sleepBackoff($backoffMs, $attempt);
                     $attempt++;
@@ -122,20 +105,15 @@ class CurlClient implements HttpClientInterface
                 }
                 throw new ConnectionException($error, $code);
             }
-
-            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-
-            $this->closeHandle($ch);
+            $headerSize = curl_getinfo($ch, \CURLINFO_HEADER_SIZE);
             if ($code >= 500 && $attempt < $retries) {
                 $this->sleepBackoff($backoffMs, $attempt);
                 $attempt++;
                 continue;
             }
-
             if (!is_string($response)) {
                 throw new ConnectionException('Unexpected empty response body from cURL request.', $code);
             }
-
             $rawHeaders = '';
             $rawBody = $response;
             if ($headerSize > 0) {
@@ -144,16 +122,9 @@ class CurlClient implements HttpClientInterface
                 $rawHeaders = $parsedHeaders;
                 $rawBody = $parsedBody;
             }
-
-            return new Response(
-                $code,
-                $this->parseBody($rawBody),
-                $this->parseHeaders($rawHeaders),
-                $rawBody
-            );
-        } while (true);
+            return new Response($code, $this->parseBody($rawBody), $this->parseHeaders($rawHeaders), $rawBody);
+        } while (\true);
     }
-
     /**
      * Format the headers to be compatible with cURL.
      *
@@ -166,7 +137,6 @@ class CurlClient implements HttpClientInterface
         if (empty($headers)) {
             return [];
         }
-
         $keys = array_keys($headers);
         $formattedHeaders = [];
         foreach ($keys as $key) {
@@ -174,7 +144,6 @@ class CurlClient implements HttpClientInterface
         }
         return $formattedHeaders;
     }
-
     /**
      * Returns JSON encoded the response's body if it is of JSON type.
      *
@@ -184,13 +153,12 @@ class CurlClient implements HttpClientInterface
      */
     private function parseBody(string $response)
     {
-        $jsonBody = json_decode($response, true);
+        $jsonBody = json_decode($response, \true);
         if (isset($jsonBody)) {
             return $jsonBody;
         }
         return $response;
     }
-
     /**
      * Parse raw HTTP header text into normalized header map.
      *
@@ -203,46 +171,31 @@ class CurlClient implements HttpClientInterface
         if ($rawHeaders === '') {
             return [];
         }
-
         $headers = [];
         $lines = preg_split("/\r\n|\n|\r/", $rawHeaders);
         if (!is_array($lines)) {
             return [];
         }
-
         foreach ($lines as $line) {
-            if ($line === '' || strpos($line, ':') === false) {
+            if ($line === '' || strpos($line, ':') === \false) {
                 continue;
             }
-
             $parts = explode(':', $line, 2);
             if (count($parts) !== 2) {
                 continue;
             }
-
             $name = trim($parts[0]);
             $value = trim($parts[1]);
             if ($name === '' || $value === '') {
                 continue;
             }
-
             if (!isset($headers[$name])) {
                 $headers[$name] = [];
             }
             $headers[$name][] = $value;
         }
-
         return $headers;
     }
-
-    /**
-     * Close the cURL handle.
-     */
-    private function closeHandle(\CurlHandle $handle): void
-    {
-        curl_close($handle);
-    }
-
     /**
      * @param int $backoffMs
      * @param int $attempt
@@ -252,11 +205,9 @@ class CurlClient implements HttpClientInterface
         if ($backoffMs <= 0) {
             return;
         }
-
         $delay = $backoffMs * (int) pow(2, $attempt);
         usleep($delay * 1000);
     }
-
     /**
      * Normalize and validate the CA bundle path.
      *
@@ -271,14 +222,11 @@ class CurlClient implements HttpClientInterface
         if ($caBundlePath === null || $caBundlePath === '') {
             return null;
         }
-
         if (!is_readable($caBundlePath)) {
             throw new ConfigurationException(sprintf('The provided ca_bundle_path "%s" is not readable.', $caBundlePath));
         }
-
         return $caBundlePath;
     }
-
     /**
      * Returns the path to the CA bundle shipped with the SDK, if present.
      *
@@ -290,7 +238,6 @@ class CurlClient implements HttpClientInterface
         if ($path && is_readable($path)) {
             return $path;
         }
-
         return null;
     }
 }

@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,19 +14,16 @@ class MandatePayload
      * @var MandatePayloadType
      */
     public MandatePayloadType $type;
-
     /**
      * Browser or client user agent observed when consent was collected.
      *
      * @var string
      */
     public string $userAgent;
-
     /**
      * IP address of the payer when the mandate was accepted.
      *
      * @var string|null
      */
     public ?string $userIp = null;
-
 }

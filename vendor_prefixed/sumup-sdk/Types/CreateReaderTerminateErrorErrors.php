@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 class CreateReaderTerminateErrorErrors
@@ -12,12 +11,10 @@ class CreateReaderTerminateErrorErrors
      * @var string|null
      */
     public ?string $detail = null;
-
     /**
      * Error code
      *
      * @var string
      */
     public string $type;
-
 }

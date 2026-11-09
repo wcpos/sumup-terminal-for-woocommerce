@@ -1,16 +1,16 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
  * Issuing card network of the payment card used for the transaction.
  */
-enum PaymentInstrumentResponseCardType: string
+enum PaymentInstrumentResponseCardType : string
 {
     case ALELO = 'ALELO';
     case AMEX = 'AMEX';
+    case BANCOMAT = 'BANCOMAT';
     case CONECS = 'CONECS';
     case CUP = 'CUP';
     case DINERS = 'DINERS';
@@ -25,6 +25,7 @@ enum PaymentInstrumentResponseCardType: string
     case MAESTRO = 'MAESTRO';
     case MASTERCARD = 'MASTERCARD';
     case PLUXEE = 'PLUXEE';
+    case SUMUP = 'SUMUP';
     case SWILE = 'SWILE';
     case TICKET = 'TICKET';
     case VISA = 'VISA';

@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -10,20 +9,17 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 class Reader
 {
     /**
-     * Unique identifier of the object.
-     * Note that this identifies the instance of the physical devices pairing with your SumUp account. If you [delete](https://developer.sumup.com/api/readers/delete-reader) a reader, and pair the device again, the ID will be different. Do not use this ID to refer to a physical device.
+     * Unique identifier of the reader that the payment is initiated on.
      *
      * @var string
      */
     public string $id;
-
     /**
      * Custom human-readable, user-defined name for easier identification of the reader.
      *
      * @var string
      */
     public string $name;
-
     /**
      * The status of the reader object gives information about the current state of the reader.
      * Possible values:
@@ -35,21 +31,18 @@ class Reader
      * @var ReaderStatus
      */
     public ReaderStatus $status;
-
     /**
      * Information about the underlying physical device.
      *
      * @var ReaderDevice
      */
     public ReaderDevice $device;
-
     /**
      * Set of user-defined key-value pairs attached to the object. Partial updates are not supported. When updating, always submit whole metadata. Maximum of 64 parameters are allowed in the object.
      *
      * @var array<string, mixed>|null
      */
     public ?array $metadata = null;
-
     /**
      * Identifier of the system-managed service account associated with this reader.
      * Present only for readers that are already paired.
@@ -58,19 +51,16 @@ class Reader
      * @var string|null
      */
     public ?string $serviceAccountId = null;
-
     /**
      * The timestamp of when the reader was created.
      *
      * @var string
      */
     public string $createdAt;
-
     /**
      * The timestamp of when the reader was last updated.
      *
      * @var string
      */
     public string $updatedAt;
-
 }

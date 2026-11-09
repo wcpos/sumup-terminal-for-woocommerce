@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -17,7 +16,7 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
  * - `SUCCESSFUL`: The event completed successfully. Use this as the generic terminal success status for event types that do not expose a more specific business outcome such as `PAID_OUT` or `REFUNDED`.
  * - `FAILED`: The event could not be completed. Typical examples are a payout that could not be executed or an event that was rejected during processing.
  */
-enum TransactionEventStatus: string
+enum TransactionEventStatus : string
 {
     case FAILED = 'FAILED';
     case PAID_OUT = 'PAID_OUT';

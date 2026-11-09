@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Receipts;
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
@@ -10,7 +9,6 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClie
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
-
 /**
  * Query parameters for ReceiptsGetParams.
  *
@@ -19,25 +17,22 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
 class ReceiptsGetParams
 {
     /**
-     * Merchant code.
+     * Short unique identifier for the merchant.
      *
      * @var string
      */
     public string $mid;
-
     /**
-     * The ID of the transaction event (refund).
+     * Unique identifier of the transaction event to include on the receipt.
      *
      * @var int|null
      */
     public ?int $txEventId = null;
-
 }
-
 /**
  * Class Receipts
  *
- * The Receipts model obtains receipt-like details for specific transactions.
+ * Retrieve structured receipt data for a transaction, including payment, merchant, and acquirer details. Use this data to display a receipt in your application. The response is JSON, rather than a rendered receipt document.
  *
  * @package SumUp\Services
  */
@@ -49,14 +44,12 @@ class Receipts implements SumUpService
      * @var HttpClientInterface
      */
     protected HttpClientInterface $client;
-
     /**
      * The access token needed for authentication for the services.
      *
      * @var string
      */
     protected string $accessToken;
-
     /**
      * Receipts constructor.
      *
@@ -68,11 +61,10 @@ class Receipts implements SumUpService
         $this->client = $client;
         $this->accessToken = $accessToken;
     }
-
     /**
      * Retrieve receipt details
      *
-     * @param string $id SumUp unique transaction ID or transaction code, e.g. TS7HDYLSKD.
+     * @param string $transactionId SumUp unique transaction ID or transaction code, e.g. TS7HDYLSKD.
      * @param ReceiptsGetParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
@@ -82,9 +74,9 @@ class Receipts implements SumUpService
      * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ConnectionException
      * @throws \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\SDKException
      */
-    public function get(string $id, ?ReceiptsGetParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Receipt
+    public function get(string $transactionId, ?ReceiptsGetParams $queryParams = null, ?RequestOptions $requestOptions = null): \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Receipt
     {
-        $path = sprintf('/v1.1/receipts/%s', rawurlencode((string) $id));
+        $path = sprintf('/v1.1/receipts/%s', rawurlencode((string) $transactionId));
         if ($queryParams !== null) {
             $queryParamsData = [];
             if (isset($queryParams->mid)) {
@@ -102,13 +94,7 @@ class Receipts implements SumUpService
         }
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Receipt::class, [
-            '400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-            '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Receipt::class, ['400' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class], '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class], '404' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Error::class]], 'GET', $path);
     }
 }

@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Entry mode of the payment details.
+ * How the payment details were captured, for example `CHIP` or `CONTACTLESS` for card-present payments and `CUSTOMER_ENTRY` for card details entered by the payer. For wallet and alternative payment methods, this can identify the method, such as `APPLE_PAY` or `BLIK`.
  */
-enum TransactionCheckoutInfoEntryMode: string
+enum TransactionCheckoutInfoEntryMode : string
 {
     case BOLETO = 'BOLETO';
     case SOFORT = 'SOFORT';

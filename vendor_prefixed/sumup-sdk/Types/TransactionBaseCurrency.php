@@ -1,15 +1,13 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Three-letter [ISO4217](https://en.wikipedia.org/wiki/ISO_4217) code of the currency for the amount. Currently supported currency values are enumerated above.
+ * Three-letter [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) currency code of the amount.
  */
-enum TransactionBaseCurrency: string
+enum TransactionBaseCurrency : string
 {
-    case BGN = 'BGN';
     case BRL = 'BRL';
     case CHF = 'CHF';
     case CLP = 'CLP';

@@ -17,19 +17,15 @@ class RequestEncoder
         if ($value === null) {
             return [];
         }
-
         if (is_array($value)) {
-            return self::normalize($value);
+            return $value;
         }
-
         $normalized = self::normalize($value);
         if (is_array($normalized)) {
             return $normalized;
         }
-
         return [];
     }
-
     /**
      * @param mixed $value
      *
@@ -40,20 +36,16 @@ class RequestEncoder
         if ($value instanceof \BackedEnum) {
             return $value->value;
         }
-
         if (is_array($value)) {
             $result = [];
             foreach ($value as $key => $item) {
                 $result[$key] = self::normalize($item);
             }
-
             return $result;
         }
-
         if (!is_object($value)) {
             return $value;
         }
-
         $result = [];
         foreach (get_object_vars($value) as $key => $item) {
             if ($item === null) {
@@ -61,10 +53,8 @@ class RequestEncoder
             }
             $result[self::toSnakeCase((string) $key)] = self::normalize($item);
         }
-
         return $result;
     }
-
     /**
      * @param string $value
      *
@@ -76,7 +66,6 @@ class RequestEncoder
         if (!is_string($snake) || $snake === '') {
             return $value;
         }
-
         return strtolower($snake);
     }
 }

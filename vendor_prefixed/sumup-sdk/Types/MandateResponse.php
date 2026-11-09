@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,19 +14,16 @@ class MandateResponse
      * @var string|null
      */
     public ?string $type = null;
-
     /**
      * Current lifecycle status of the mandate.
      *
      * @var MandateResponseStatus|null
      */
     public ?MandateResponseStatus $status = null;
-
     /**
-     * Merchant account for which the mandate is valid.
+     * Short unique identifier for the merchant for which the mandate is valid.
      *
      * @var string|null
      */
     public ?string $merchantCode = null;
-
 }

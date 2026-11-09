@@ -5,7 +5,7 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\ApiException;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Exception\UnexpectedApiException;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\Response;
-
+use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem;
 /**
  * Converts HTTP responses into SDK models or scalar values.
  */
@@ -25,45 +25,28 @@ class ResponseDecoder
      * @throws ApiException
      * @throws UnexpectedApiException
      */
-    public static function decodeOrThrow(
-        Response $response,
-        $successDescriptors = null,
-        $errorDescriptors = null,
-        ?string $httpMethod = null,
-        ?string $path = null
-    ) {
+    public static function decodeOrThrow(Response $response, $successDescriptors = null, $errorDescriptors = null, ?string $httpMethod = null, ?string $path = null)
+    {
         $statusCode = $response->getHttpResponseCode();
         if ($statusCode >= 200 && $statusCode < 300) {
             return self::decode($response, $successDescriptors);
         }
-
         if (self::hasDescriptorForStatus($errorDescriptors, $statusCode)) {
-            $decodedErrorBody = self::decode($response, $errorDescriptors);
+            try {
+                $decodedErrorBody = self::decode($response, $errorDescriptors);
+                if ($decodedErrorBody instanceof Problem && !isset($decodedErrorBody->type)) {
+                    $decodedErrorBody = $response->getBody();
+                }
+            } catch (\TypeError|\ReflectionException|\InvalidArgumentException $exception) {
+                $decodedErrorBody = $response->getBody();
+            }
             $message = self::extractErrorMessage($decodedErrorBody, self::defaultErrorMessage($statusCode));
-
-            throw new ApiException(
-                $message,
-                $statusCode,
-                $decodedErrorBody,
-                $httpMethod,
-                $path
-            );
+            throw new ApiException($message, $statusCode, $decodedErrorBody, $httpMethod, $path, null, $response);
         }
-
         $rawErrorBody = $response->getBody();
         $message = self::extractErrorMessage($rawErrorBody, self::defaultUnexpectedErrorMessage($statusCode));
-
-        throw new UnexpectedApiException(
-            $message,
-            $statusCode,
-            $rawErrorBody,
-            $httpMethod,
-            $path,
-            $response->getHeaders(),
-            $response->getRawBody()
-        );
+        throw new UnexpectedApiException($message, $statusCode, $rawErrorBody, $httpMethod, $path, $response->getHeaders(), $response->getRawBody(), null, $response);
     }
-
     /**
      * Decode a response using the provided descriptor map or class name.
      *
@@ -78,12 +61,10 @@ class ResponseDecoder
         if (is_string($descriptors)) {
             return Hydrator::hydrate($response->getBody(), $descriptors);
         }
-
         // If null or empty, return raw body
         if (empty($descriptors)) {
             return $response->getBody();
         }
-
         // Legacy descriptor array support
         $statusCode = (string) $response->getHttpResponseCode();
         $descriptor = null;
@@ -92,14 +73,11 @@ class ResponseDecoder
         } elseif (isset($descriptors['default'])) {
             $descriptor = $descriptors['default'];
         }
-
         if ($descriptor === null || !isset($descriptor['type'])) {
             return $response->getBody();
         }
-
         return self::castValue($response->getBody(), $descriptor);
     }
-
     /**
      * Convert the payload to the descriptor type.
      *
@@ -115,22 +93,18 @@ class ResponseDecoder
                 if (!isset($descriptor['class'])) {
                     return $value;
                 }
-
                 return Hydrator::hydrate($value, ltrim($descriptor['class'], '\\'));
             case 'array':
                 if (!is_array($value)) {
                     $value = $value instanceof \stdClass ? get_object_vars($value) : (array) $value;
                 }
-
                 if (!isset($descriptor['items']) || empty($descriptor['items'])) {
                     return $value;
                 }
-
                 $result = [];
                 foreach ($value as $key => $item) {
                     $result[$key] = self::castValue($item, $descriptor['items']);
                 }
-
                 return $result;
             case 'scalar':
                 return self::castScalar($value, isset($descriptor['scalar']) ? $descriptor['scalar'] : 'mixed');
@@ -138,11 +112,9 @@ class ResponseDecoder
                 if (is_array($value)) {
                     return $value;
                 }
-
                 if (is_object($value)) {
                     return get_object_vars($value);
                 }
-
                 return [];
             case 'void':
                 return null;
@@ -151,7 +123,6 @@ class ResponseDecoder
                 return $value;
         }
     }
-
     /**
      * Cast scalar values to their expected PHP type.
      *
@@ -175,7 +146,6 @@ class ResponseDecoder
                 return $value;
         }
     }
-
     /**
      * @param mixed $descriptors
      * @param int $statusCode
@@ -185,17 +155,14 @@ class ResponseDecoder
     private static function hasDescriptorForStatus($descriptors, int $statusCode): bool
     {
         if (is_string($descriptors)) {
-            return true;
+            return \true;
         }
-
         if (!is_array($descriptors) || empty($descriptors)) {
-            return false;
+            return \false;
         }
-
         $status = (string) $statusCode;
         return isset($descriptors[$status]) || isset($descriptors['default']);
     }
-
     /**
      * @param int $statusCode
      *
@@ -206,10 +173,8 @@ class ResponseDecoder
         if ($statusCode >= 500) {
             return 'Server error';
         }
-
         return 'Client error';
     }
-
     /**
      * @param int $statusCode
      *
@@ -219,7 +184,6 @@ class ResponseDecoder
     {
         return sprintf('Unexpected API response (%d)', $statusCode);
     }
-
     /**
      * @param mixed $body
      * @param string $defaultMessage
@@ -228,16 +192,14 @@ class ResponseDecoder
      */
     private static function extractErrorMessage($body, string $defaultMessage): string
     {
-        foreach (['message', 'error_message', 'error_description', 'error'] as $key) {
+        foreach (['detail', 'title', 'message', 'error_message', 'error_description', 'error'] as $key) {
             $value = self::readField($body, $key);
             if (is_string($value) && $value !== '') {
                 return $value;
             }
         }
-
         return $defaultMessage;
     }
-
     /**
      * @param mixed $payload
      * @param string $key
@@ -252,7 +214,6 @@ class ResponseDecoder
         if (is_object($payload) && isset($payload->{$key})) {
             return $payload->{$key};
         }
-
         return null;
     }
 }

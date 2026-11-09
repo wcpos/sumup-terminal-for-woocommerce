@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,5 +14,4 @@ class CheckoutAccepted
      * @var CheckoutAcceptedNextStep|null
      */
     public ?CheckoutAcceptedNextStep $nextStep = null;
-
 }

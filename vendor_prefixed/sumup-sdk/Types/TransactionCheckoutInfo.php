@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,33 +14,28 @@ class TransactionCheckoutInfo
      * @var string|null
      */
     public ?string $merchantCode = null;
-
     /**
-     * Amount of the applicable VAT (out of the total transaction amount).
+     * VAT included in the total transaction amount, in major units of the transaction's currency.
      *
      * @var float|null
      */
     public ?float $vatAmount = null;
-
     /**
-     * Amount of the tip (out of the total transaction amount).
+     * Tip included in the total transaction amount, in major units of the transaction's currency.
      *
      * @var float|null
      */
     public ?float $tipAmount = null;
-
     /**
-     * Entry mode of the payment details.
+     * How the payment details were captured, for example `CHIP` or `CONTACTLESS` for card-present payments and `CUSTOMER_ENTRY` for card details entered by the payer. For wallet and alternative payment methods, this can identify the method, such as `APPLE_PAY` or `BLIK`.
      *
      * @var TransactionCheckoutInfoEntryMode|null
      */
     public ?TransactionCheckoutInfoEntryMode $entryMode = null;
-
     /**
      * Authorization code for the transaction sent by the payment card issuer or bank. Applicable only to card payments.
      *
      * @var string|null
      */
     public ?string $authCode = null;
-
 }

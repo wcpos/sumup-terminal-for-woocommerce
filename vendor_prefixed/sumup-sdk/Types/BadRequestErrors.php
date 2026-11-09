@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 class BadRequestErrors
@@ -12,12 +11,10 @@ class BadRequestErrors
      * @var string|null
      */
     public ?string $detail = null;
-
     /**
      * Key indicating type of error
      *
      * @var BadRequestErrorsType
      */
     public BadRequestErrorsType $type;
-
 }

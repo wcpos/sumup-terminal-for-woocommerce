@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Payouts;
 
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Services;
@@ -10,7 +9,6 @@ use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\HttpClie
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestHeaders;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\HttpClient\RequestOptions;
 use WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\ResponseDecoder;
-
 /**
  * Query parameters for PayoutsListParams.
  *
@@ -24,37 +22,31 @@ class PayoutsListParams
      * @var string
      */
     public string $startDate;
-
     /**
      * End date of the payout period filter, inclusive, in [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) `date` format (`YYYY-MM-DD`). Must be greater than or equal to `start_date`.
      *
      * @var string
      */
     public string $endDate;
-
     /**
      * Response format for the payout list.
      *
      * @var string|null
      */
     public ?string $format = null;
-
     /**
      * Maximum number of payout records to return.
      *
      * @var int|null
      */
     public ?int $limit = null;
-
     /**
      * Sort direction for the returned payouts.
      *
      * @var string|null
      */
     public ?string $order = null;
-
 }
-
 /**
  * Class Payouts
  *
@@ -72,14 +64,12 @@ class Payouts implements SumUpService
      * @var HttpClientInterface
      */
     protected HttpClientInterface $client;
-
     /**
      * The access token needed for authentication for the services.
      *
      * @var string
      */
     protected string $accessToken;
-
     /**
      * Payouts constructor.
      *
@@ -91,11 +81,10 @@ class Payouts implements SumUpService
         $this->client = $client;
         $this->accessToken = $accessToken;
     }
-
     /**
      * List payouts
      *
-     * @param string $merchantCode Merchant code of the account whose payouts should be listed.
+     * @param string $merchantCode Short unique identifier for the merchant.
      * @param PayoutsListParams|null $queryParams Optional query string parameters
      * @param RequestOptions|null $requestOptions Optional typed request options
      *
@@ -134,14 +123,7 @@ class Payouts implements SumUpService
         }
         $payload = [];
         $headers = RequestHeaders::build($this->accessToken, $requestOptions);
-
         $response = $this->client->send('GET', $path, $payload, $headers, $requestOptions);
-
-        return ResponseDecoder::decodeOrThrow($response, [
-            '200' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\FinancialPayout::class]],
-        ], [
-            '400' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorExtended::class]],
-            '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class],
-        ], 'GET', $path);
+        return ResponseDecoder::decodeOrThrow($response, ['200' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\FinancialPayout::class]]], ['400' => ['type' => 'array', 'items' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\ErrorExtended::class]], '401' => ['type' => 'class', 'class' => \WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types\Problem::class]], 'GET', $path);
     }
 }

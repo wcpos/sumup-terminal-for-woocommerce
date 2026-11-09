@@ -1,13 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Debit/Credit.
+ * Whether the transaction was processed as credit or debit.
  */
-enum ReceiptTransactionProcessAs: string
+enum ReceiptTransactionProcessAs : string
 {
     case CREDIT = 'CREDIT';
     case DEBIT = 'DEBIT';

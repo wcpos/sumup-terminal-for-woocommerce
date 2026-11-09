@@ -1,11 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
- * Error message for forbidden requests.
+ * Details of an error returned for a forbidden request.
  */
 class ErrorForbidden
 {
@@ -15,19 +14,16 @@ class ErrorForbidden
      * @var string|null
      */
     public ?string $errorMessage = null;
-
     /**
      * Platform code for the error.
      *
      * @var string|null
      */
     public ?string $errorCode = null;
-
     /**
      * HTTP status code for the error.
      *
      * @var string|null
      */
     public ?string $statusCode = null;
-
 }

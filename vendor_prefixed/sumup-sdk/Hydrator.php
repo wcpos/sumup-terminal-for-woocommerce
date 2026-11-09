@@ -5,7 +5,6 @@ namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionProperty;
-
 /**
  * Hydrates SDK models from associative arrays or stdClass payloads.
  */
@@ -17,7 +16,6 @@ class Hydrator
      * @var array<string, array<string, ReflectionProperty>>
      */
     private static $propertyCache = [];
-
     /**
      * Hydrate the provided payload into the given class.
      *
@@ -32,33 +30,24 @@ class Hydrator
         if ($payload === null || $className === '' || !class_exists($className)) {
             return $payload;
         }
-
         if ($payload instanceof $className) {
             return $payload;
         }
-
         if (!is_array($payload)) {
             return $payload;
         }
-
-        $object = ($target instanceof $className)
-            ? $target
-            : (new ReflectionClass($className))->newInstanceWithoutConstructor();
+        $object = $target instanceof $className ? $target : (new ReflectionClass($className))->newInstanceWithoutConstructor();
         $properties = self::getClassProperties($className);
-
         foreach ($payload as $key => $value) {
             $propertyName = self::normalizePropertyName($key);
             if (!isset($properties[$propertyName])) {
                 continue;
             }
-
             $property = $properties[$propertyName];
             $property->setValue($object, self::castValue($value, $property));
         }
-
         return $object;
     }
-
     /**
      * @param string $className
      *
@@ -69,22 +58,17 @@ class Hydrator
         if (isset(self::$propertyCache[$className])) {
             return self::$propertyCache[$className];
         }
-
         if (!class_exists($className)) {
             return [];
         }
-
         $refClass = new ReflectionClass($className);
         $properties = [];
         foreach ($refClass->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
             $properties[$property->getName()] = $property;
         }
-
         self::$propertyCache[$className] = $properties;
-
         return $properties;
     }
-
     /**
      * @param mixed $value
      * @param ReflectionProperty $property
@@ -96,12 +80,10 @@ class Hydrator
         if ($value === null) {
             return null;
         }
-
         $type = $property->getType();
         if (!$type instanceof ReflectionNamedType) {
             return $value;
         }
-
         $typeName = $type->getName();
         if ($type->isBuiltin()) {
             switch ($typeName) {
@@ -112,6 +94,9 @@ class Hydrator
                 case 'bool':
                     return (bool) $value;
                 case 'string':
+                    if (!is_scalar($value) && !$value instanceof \Stringable) {
+                        throw new \InvalidArgumentException('Expected a scalar value for ' . $property->getName());
+                    }
                     return (string) $value;
                 case 'array':
                     return self::castArrayValue($value, $property);
@@ -119,14 +104,11 @@ class Hydrator
                     return $value;
             }
         }
-
         if (enum_exists($typeName)) {
             return self::castEnumValue($value, $typeName);
         }
-
         return self::hydrate($value, $typeName);
     }
-
     /**
      * @param mixed $value
      * @param string $enumClass
@@ -138,21 +120,17 @@ class Hydrator
         if ($value instanceof $enumClass) {
             return $value;
         }
-
         if (method_exists($enumClass, 'tryFrom')) {
             $enum = $enumClass::tryFrom($value);
             if ($enum !== null) {
                 return $enum;
             }
         }
-
         if (method_exists($enumClass, 'from')) {
             return $enumClass::from($value);
         }
-
         return $value;
     }
-
     /**
      * @param mixed $value
      * @param ReflectionProperty $property
@@ -164,20 +142,16 @@ class Hydrator
         if (!is_array($value)) {
             return [];
         }
-
         $itemType = self::extractArrayItemType($property);
         if ($itemType === null) {
             return $value;
         }
-
         $result = [];
         foreach ($value as $key => $item) {
             $result[$key] = self::castArrayItem($item, $itemType, $property);
         }
-
         return $result;
     }
-
     /**
      * @param ReflectionProperty $property
      *
@@ -186,14 +160,12 @@ class Hydrator
     private static function extractArrayItemType(ReflectionProperty $property)
     {
         $docComment = $property->getDocComment();
-        if ($docComment === false) {
+        if ($docComment === \false) {
             return null;
         }
-
         if (!preg_match('/@var\s+([^\s]+)/', $docComment, $matches)) {
             return null;
         }
-
         $types = explode('|', $matches[1]);
         foreach ($types as $type) {
             $type = trim($type);
@@ -204,10 +176,8 @@ class Hydrator
                 return substr($type, 0, -2);
             }
         }
-
         return null;
     }
-
     /**
      * @param mixed $item
      * @param string $itemType
@@ -232,7 +202,6 @@ class Hydrator
             case 'mixed':
                 return $item;
         }
-
         $className = $itemType;
         if ($itemType[0] !== '\\') {
             $namespace = $property->getDeclaringClass()->getNamespaceName();
@@ -244,14 +213,11 @@ class Hydrator
         } else {
             $className = ltrim($itemType, '\\');
         }
-
         if (!class_exists($className)) {
             return $item;
         }
-
         return self::hydrate($item, $className);
     }
-
     /**
      * Normalize serialized property names into PHP property names.
      *
@@ -267,15 +233,12 @@ class Hydrator
         if ($value === '') {
             $value = 'field';
         }
-
         $value = self::toLowerCamel($value);
         if (self::isReservedWord($value)) {
             $value .= 'Value';
         }
-
         return $value;
     }
-
     /**
      * Convert strings to lower camelCase.
      *
@@ -288,10 +251,8 @@ class Hydrator
         $value = str_replace('_', ' ', $value);
         $value = ucwords($value);
         $value = str_replace(' ', '', $value);
-
         return lcfirst($value);
     }
-
     /**
      * @param string $word
      *
@@ -299,31 +260,7 @@ class Hydrator
      */
     private static function isReservedWord($word)
     {
-        static $reserved = [
-            'abstract' => true,
-            'array' => true,
-            'callable' => true,
-            'class' => true,
-            'const' => true,
-            'default' => true,
-            'function' => true,
-            'global' => true,
-            'interface' => true,
-            'new' => true,
-            'private' => true,
-            'protected' => true,
-            'public' => true,
-            'static' => true,
-            'string' => true,
-            'int' => true,
-            'float' => true,
-            'bool' => true,
-            'self' => true,
-            'parent' => true,
-            'trait' => true,
-            'namespace' => true,
-        ];
-
+        static $reserved = ['abstract' => \true, 'array' => \true, 'callable' => \true, 'class' => \true, 'const' => \true, 'default' => \true, 'function' => \true, 'global' => \true, 'interface' => \true, 'new' => \true, 'private' => \true, 'protected' => \true, 'public' => \true, 'static' => \true, 'string' => \true, 'int' => \true, 'float' => \true, 'bool' => \true, 'self' => \true, 'parent' => \true, 'trait' => \true, 'namespace' => \true];
         return isset($reserved[$word]);
     }
 }

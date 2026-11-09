@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -20,7 +19,6 @@ class CreateReaderCheckoutRequestTotalAmount
      * @var string
      */
     public string $currency;
-
     /**
      * The minor units of the currency.
      * It represents the number of decimals of the currency. For the currencies CLP, COP and HUF, the minor unit is 0.
@@ -28,12 +26,10 @@ class CreateReaderCheckoutRequestTotalAmount
      * @var int
      */
     public int $minorUnit;
-
     /**
      * Integer value of the amount.
      *
      * @var int
      */
     public int $value;
-
 }

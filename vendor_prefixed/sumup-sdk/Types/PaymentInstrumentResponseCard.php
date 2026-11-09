@@ -1,7 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
+declare (strict_types=1);
 namespace WCPOS\WooCommercePOS\SumUpTerminal\Vendor\SumUpSdk\SumUp\Types;
 
 /**
@@ -15,12 +14,10 @@ class PaymentInstrumentResponseCard
      * @var string|null
      */
     public ?string $last4Digits = null;
-
     /**
      * Issuing card network of the payment card used for the transaction.
      *
      * @var PaymentInstrumentResponseCardType|null
      */
     public ?PaymentInstrumentResponseCardType $type = null;
-
 }
