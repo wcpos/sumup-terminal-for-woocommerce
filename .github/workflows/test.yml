@@ -19,12 +19,12 @@ jobs:
         php: ['7.4', '8.3']
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup PHP ${{ matrix.php }}
-        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -73,7 +73,7 @@ jobs:
         working-directory: sumup-terminal-for-woocommerce
     steps:
       - name: Checkout extension
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: sumup-terminal-for-woocommerce
           persist-credentials: false
@@ -83,7 +83,7 @@ jobs:
       # scoped to contents:read on the private Pro repo. Fork PRs get no secrets and stop here by design.
       - name: Read-only Pro token
         id: pro-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.WCPOS_BOT_APP_ID }}
           private-key: ${{ secrets.WCPOS_BOT_PRIVATE_KEY }}
@@ -92,7 +92,7 @@ jobs:
           permission-contents: read
 
       - name: Checkout Pro main as sibling
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: wcpos/woocommerce-pos-pro
           ref: main
@@ -101,7 +101,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP ${{ matrix.php }}
-        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -113,7 +113,7 @@ jobs:
           composer install --working-dir=../woocommerce-pos-pro --no-interaction --prefer-dist --no-progress
 
       - name: Setup Node
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
